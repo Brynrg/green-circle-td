@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Green Circle TD</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body data-game-root>
+  <div id="app">
+    <header id="topbar">
+      <div class="brand">🟢 Green Circle TD</div>
+      <div id="stats" class="stats">
+        <span id="wave">Wave 0 / 30</span>
+        <span id="gold">💰 250</span>
+        <span id="lives">❤ 20</span>
+      </div>
+      <div id="timer" class="timer">00:00.000</div>
+      <div id="pb" class="pb">PB —</div>
+    </header>
+
+    <div id="stage">
+      <canvas id="gameCanvas" width="960" height="600"></canvas>
+      <div id="overlay" class="overlay hidden"></div>
+    </div>
+
+    <section id="controls">
+      <div class="panel build">
+        <h3>Towers <span class="hint">(pick, then click a buildable tile)</span></h3>
+        <div id="towerButtons" class="btnrow"></div>
+      </div>
+      <div class="panel side">
+        <h3 id="waveName">Ready</h3>
+        <p id="waveHint" class="hint">Build a tower, then start the first wave.</p>
+        <button id="startWave" class="primary">Start wave ▶</button>
+        <p class="keys">Keys: <b>1–9</b> pick tower · <b>Space</b> start wave · <b>Esc</b> deselect · <b>S</b> sell (hover)</p>
+      </div>
+    </section>
+  </div>
+  <script src="main.js"></script>
+</body>
+</html>
