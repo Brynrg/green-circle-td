@@ -4,8 +4,8 @@
   "description": "Maze tower defense: creeps spiral in from four corners to the center. Armor-vs-damage matrix, aura towers, detectors, a scrollable map, and 30 escalating waves to a multi-phase boss.",
   "framework": "vanilla",
   "category": "tower-defense",
-  "supportsMobile": false,
-  "version": "1.1.0",
+  "supportsMobile": true,
+  "version": "1.2.0",
   "emoji": "🟢",
   "entry": "index.html",
   "repo": "Brynrg/green-circle-td"
