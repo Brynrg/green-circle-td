@@ -246,6 +246,7 @@ class Game {
     this.enemies = [];
     this.bullets = [];
     this.fx = [];                // muzzle flashes, hit sparks, death puffs
+    this._shake = null;          // screen-shake state {t, dur, intensity}
     this.waveIndex = 0;
     this.spawnQueue = [];        // {time(abs sim sec), corner, hp, speed, bounty, def, enemy, rec}
     this.activeWaves = [];       // wave records in flight: {id,name,reward,pending,alive,done}
@@ -719,9 +720,10 @@ class Game {
     // Show armor type pill so players know what's coming
     const armorTypes = [...new Set(w.spawns.map((sp) => ENEMIES[sp.e].armor))];
     this.setArmorPill(armorTypes);
-    // Boss wave: signal danger on the wave panel
+    // Boss wave: signal danger on the wave panel + screen shake
     const wavePanel = document.getElementById("wavePanel");
     if (wavePanel) wavePanel.classList.toggle("boss-wave", !!w.boss);
+    if (w.boss) this.shakeCamera(0.55, 10);
     this.refreshButtons();
   }
 
@@ -808,6 +810,7 @@ class Game {
       this.refreshButtons();
     }
     if (this.lives <= 0) this.end(false);
+    if (this._shake && this._shake.t > 0) { this._shake.t -= dt; if (this._shake.t <= 0) this._shake = null; }
   }
 
   moveEnemies(dt) {
@@ -873,7 +876,18 @@ class Game {
     if (en.hp > 0) this.spawnFx(en.x, en.y, "#fde68a", "spark");
     if (en.hp <= 0) this.onKill(en);
   }
-  onKill(en) { if (en._dead) return; en._dead = true; this.gold += en.bounty; this.spawnFx(en.x, en.y, en.color, "puff"); this.refreshButtons(); }
+  onKill(en) {
+    if (en._dead) return; en._dead = true;
+    this.gold += en.bounty;
+    this.spawnFx(en.x, en.y, en.color, "puff");
+    if (en.flags.includes("boss")) this.shakeCamera(0.38, 7);
+    else if (en.flags.includes("hero")) this.shakeCamera(0.18, 3);
+    this.refreshButtons();
+  }
+  shakeCamera(duration, intensity) {
+    if (this._shake && this._shake.t > 0 && intensity < this._shake.intensity) return; // don't downgrade
+    this._shake = { t: duration, dur: duration, intensity };
+  }
   onLeak(en) {
     const cost = en.flags.includes("boss") ? 10 : en.flags.includes("hero") ? 4 : 1;
     this.lives -= cost;
@@ -897,12 +911,20 @@ class Game {
   draw() {
     const ctx = this.ctx;
     ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
-    ctx.clearRect(0, 0, this.cssW, this.cssH);
-    ctx.fillStyle = "#0c130d"; ctx.fillRect(0, 0, this.cssW, this.cssH);
+    // Semi-transparent fill instead of clearRect: moving enemies/bullets accumulate
+    // 1-2 frame motion trails; static towers & paths are redrawn fresh → stay sharp.
+    ctx.fillStyle = "rgba(12,19,13,0.87)";
+    ctx.fillRect(0, 0, this.cssW, this.cssH);
 
     ctx.save();
     ctx.scale(this.cam.zoom, this.cam.zoom);
     ctx.translate(-this.cam.x, -this.cam.y);
+    // Screen shake — world-space offset only, HUD unaffected
+    if (this._shake && this._shake.t > 0) {
+      const pct = this._shake.t / this._shake.dur;
+      const s = this._shake.intensity * pct / this.cam.zoom;
+      ctx.translate((Math.random() - 0.5) * s * 2, (Math.random() - 0.5) * s * 2);
+    }
 
     // world border
     ctx.strokeStyle = "#152017"; ctx.lineWidth = 2; ctx.strokeRect(0, 0, WORLD, WORLD);
@@ -915,6 +937,8 @@ class Game {
       for (let i = 1; i < path.length; i++) ctx.lineTo(path[i][0], path[i][1]);
       ctx.stroke();
       ctx.strokeStyle = "#172419"; ctx.lineWidth = PATH_W - 8; ctx.stroke();
+      // Worn centre highlight — gives dirt-track depth without any asset
+      ctx.strokeStyle = "rgba(134,239,172,.048)"; ctx.lineWidth = 2; ctx.stroke();
     }
     // corner spawn markers
     for (const path of PATHS) {
@@ -959,20 +983,29 @@ class Game {
       if (sel.s.aura) { ctx.strokeStyle = "rgba(255,255,255,.22)"; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(sel.x, sel.y, sel.s.aura.radius, 0, 7); ctx.stroke(); }
     }
 
-    // bullets
+    // bullets — 'lighter' additive composite: overlapping shots accumulate into bright beams
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
     for (const b of this.bullets) {
-      ctx.strokeStyle = b.color; ctx.lineWidth = 2; ctx.globalAlpha = b.t / 0.09;
+      ctx.strokeStyle = b.color; ctx.lineWidth = 2.5; ctx.globalAlpha = b.t / 0.09;
       ctx.beginPath(); ctx.moveTo(b.x1, b.y1); ctx.lineTo(b.x2, b.y2); ctx.stroke();
     }
     ctx.globalAlpha = 1;
+    ctx.restore();
 
     // enemies
     for (const en of this.enemies) { if (en.hp > 0) this.drawCreep(ctx, en); }
-    // effects on top (world space)
+
+    // effects on top — 'lighter' makes death puffs and muzzle flashes additively glow
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
     this.drawFx(ctx);
     ctx.restore();
 
-    this.drawMinimap();
+    ctx.restore(); // end world transform
+
+    this.drawVignette(); // screen-space radial gradient — darkens edges, focuses center
+    this.drawMinimap();  // minimap draws over vignette
     ctx.lineWidth = 1;
   }
 
@@ -987,15 +1020,14 @@ class Game {
     } else if (kind === "radar") tw.angle += 0.06;
     // base platform
     ctx.fillStyle = "#0e1a12"; this.round(tw.c * CELL + 4, tw.r * CELL + 4, CELL - 8, CELL - 8, 7); ctx.fill();
-    // tier glow
-    if (tw.level >= 2 || tw.spec) {
-      ctx.save(); ctx.globalAlpha = tw.spec ? 0.55 : 0.3;
-      const g = ctx.createRadialGradient(x, y, 2, x, y, 19); g.addColorStop(0, col); g.addColorStop(1, "rgba(0,0,0,0)");
-      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, 19, 0, 7); ctx.fill(); ctx.restore();
-    }
     // base disc
     ctx.fillStyle = "#16271b"; ctx.beginPath(); ctx.arc(x, y, 11, 0, 7); ctx.fill();
+    // Ring — shadowBlur scales with level: Lv1 clean, Lv2 soft glow, Lv3 bright, spec blazing
+    // shadowBlur NOT expensive per spec; refuted by MDN perf research (canvas-performance)
+    ctx.shadowBlur = tw.spec ? 22 : tw.level === 3 ? 14 : tw.level === 2 ? 7 : 0;
+    ctx.shadowColor = col;
     ctx.strokeStyle = col; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(x, y, 11, 0, 7); ctx.stroke();
+    ctx.shadowBlur = 0; ctx.shadowColor = "transparent";
     // turret
     ctx.fillStyle = col;
     if (kind === "barrel") {
@@ -1097,6 +1129,17 @@ class Game {
     ctx.strokeStyle = "rgba(255,255,255,.5)";
     ctx.strokeRect(x0 + this.cam.x * k, y0 + this.cam.y * k, vw * k, vh * k);
     ctx.restore();
+  }
+
+  drawVignette() {
+    // Screen-space radial vignette — pulls the eye toward the field center
+    const ctx = this.ctx, W = this.cssW, H = this.cssH;
+    const inner = Math.min(W, H) * 0.26, outer = Math.max(W, H) * 0.78;
+    const g = ctx.createRadialGradient(W / 2, H / 2, inner, W / 2, H / 2, outer);
+    g.addColorStop(0, "rgba(0,0,0,0)");
+    g.addColorStop(1, "rgba(0,0,0,0.48)");
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, W, H);
   }
 
   round(x, y, w, h, r) {
