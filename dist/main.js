@@ -904,7 +904,7 @@ class Game {
 
       const wavePanel = document.getElementById("wavePanel");
       if (wavePanel) wavePanel.classList.remove("boss-wave");
-      if (this.waveIndex >= WAVES.length && this.activeWaves.length === 0) { this.setWaveText("All clear", "Final wave done!"); this.setArmorPill([]); this.end(true); return; }
+      if (this.waveIndex >= WAVES.length && this.activeWaves.length === 0 && this.lives > 0) { this.setWaveText("All clear", "Final wave done!"); this.setArmorPill([]); this.end(true); return; }
       const nextName = this.waves[this.waveIndex]?.name ?? "";
       const clearHint = this.waveIndex >= WAVES.length
         ? `+${reward}g${extStr}. Last waves still in flight.`
