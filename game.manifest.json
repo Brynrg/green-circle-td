@@ -6,6 +6,9 @@
   "category": "tower-defense",
   "supportsMobile": true,
   "version": "1.8.0",
+  "multiplayer": "realtime-server",
+  "multiplayerProvider": "fly-io",
+  "multiplayerEndpoint": "wss://gctd-server.fly.dev",
   "emoji": "🟢",
   "entry": "index.html",
   "repo": "Brynrg/green-circle-td"

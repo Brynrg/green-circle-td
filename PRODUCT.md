@@ -10,7 +10,7 @@ Speedrunners and casual tower defense players in a browser, desktop-first with m
 
 ## Product Purpose
 
-A browser port of the classic WC3 Green Circle TD: creeps spiral from four corners toward the center, players build and upgrade towers in the gaps to stop them. The speedrun timer is the score. Success means surviving all 30 waves and beating your personal best.
+A browser port of the classic WC3 Green Circle TD: creeps spiral from four corners toward the center, players build and upgrade towers in the gaps to stop them. The speedrun timer is the score. Success means surviving all 30 waves and beating your personal best. Online co-op (2–4 players, WC3-style room codes, per-player zones, shared lives) recreates the original's multiplayer; the lobby surfaces (name entry, room code, waiting room) carry the same tactical-HUD register as the rest of the shell — a room code is mission intel, not a party invitation.
 
 ## Brand Personality
 
