@@ -14,7 +14,11 @@ A browser port of the classic WC3 Green Circle TD: creeps spiral from four corne
 
 ## Brand Personality
 
-Tactical. Urgent. Readable. The UI should feel like military HUD hardware: information-dense, glanceable, with no decoration that doesn't carry data. The canvas game world is dark and alive; the HTML shell frames it without competing.
+Tactical. Urgent. Readable — with a Martian / Gold Society register (Iron Rain):
+iron + Peerless brass chrome, scarlet danger, gold timer. The UI should feel
+like military HUD hardware over a Red Rising–inspired arena: information-dense,
+glanceable, with no decoration that doesn't carry data. The canvas game world is
+dark, dusty, and alive; the HTML shell frames it without competing.
 
 ## Anti-references
 
@@ -22,6 +26,7 @@ Tactical. Urgent. Readable. The UI should feel like military HUD hardware: infor
 - Neon cyberpunk glow-everything treatment
 - Casual mobile game UI: bubbly buttons, soft drop shadows everywhere
 - Fantasy RPG parchment / scroll aesthetic
+- Cold War green PPI-radar phosphor (superseded by Iron Rain gold/ember)
 
 ## Design Principles
 
