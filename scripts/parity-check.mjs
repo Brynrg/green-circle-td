@@ -37,6 +37,9 @@ ok("PATH_VARIANTS present", /PATH_VARIANTS/.test(main));
 ok("interest cap 60", /Math\.min\(60,\s*Math\.floor\(p\.gold/.test(main));
 ok("support SPECS (detector)", /detector:\s*\[/.test(main));
 ok("support SPECS (mint)", /mint:\s*\[/.test(main));
+ok("3-way basic SPECS", /bulwark/.test(main));
+ok("AUTO_WAVE_DELAY", /AUTO_WAVE_DELAY\s*=\s*2\.5/.test(main));
+ok("autoWaveAt scheduling", /autoWaveAt\s*=\s*this\.gameTime\s*\+\s*AUTO_WAVE_DELAY/.test(main));
 ok("DIFFICULTY table", /DIFFICULTY\s*=\s*\{/.test(main));
 ok("boss phase check", /checkBossPhase/.test(main));
 ok("shredder canAir", /shredder[\s\S]*canAir:\s*true/.test(main));
@@ -51,6 +54,24 @@ if (existsSync(simPath)) {
   // compare server hash to known expected from this overhaul.
   const h = sim.pathHash();
   ok("pathHash stable", h === 788541440 || typeof h === "number", `got ${h}`);
+  ok("server AUTO_WAVE_DELAY", sim.AUTO_WAVE_DELAY === 2.5, String(sim.AUTO_WAVE_DELAY));
+  ok("server 3-way SPECS (basic)", Array.isArray(sim.SPECS?.basic) && sim.SPECS.basic.length === 3 && sim.SPECS.basic[2].id === "bulwark");
+  // Spec id parity vs client source
+  const clientIds = {};
+  for (const m of main.matchAll(/^\s{2}(\w+):\s*\[/gm)) {
+    const key = m[1];
+    if (!["basic","sniper","rapid","splash","frost","poison","void","detector","damage_aura","speed_aura","mint"].includes(key)) continue;
+    const block = main.slice(m.index, m.index + 800);
+    const ids = [...block.matchAll(/id:\s*"(\w+)"/g)].map((x) => x[1]);
+    clientIds[key] = ids.slice(0, sim.SPECS[key]?.length || 0);
+  }
+  let specParity = true;
+  for (const key of Object.keys(sim.SPECS || {})) {
+    const srv = (sim.SPECS[key] || []).map((s) => s.id);
+    const cli = clientIds[key] || [];
+    if (srv.join(",") !== cli.join(",")) { specParity = false; ok(`SPECS.${key} ids`, false, `server=${srv} client=${cli}`); }
+  }
+  if (specParity) ok("SPECS id parity (all families)", true);
 } else {
   ok("server sim.js found", false, `missing ${simPath}`);
 }
