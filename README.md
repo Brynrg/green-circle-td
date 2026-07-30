@@ -23,10 +23,10 @@ you can (speedrun).
   `wss://gctd-server.fly.dev`) runs the one true sim; clients send inputs and
   render 15Hz snapshots. Local 1–4 player hot-seat co-op also available (Tab
   switches the active builder).
-- **Four-corner spiral paths** — creeps spawn from each corner and follow
-  concentric loops inward to the center (ported from the original
-  `core/path.py`). A leak = a creep reaching the center (boss −10 lives,
-  hero −4, others −1).
+- **Four-corner concentric rings** — creeps spawn from each corner and follow
+  square rings inward to the center (CW or seeded CCW fork). A leak = a creep
+  reaching the center (boss −10 lives, hero −4, others −1). Fixed Path mode
+  disables fork variance for speedruns.
 - **Armor-vs-damage matrix** — `pierce / siege / magic / normal / chaos` vs
   `light / medium / heavy / fortified / hero`. Chaos (WC3-style) ignores armor
   entirely — the late-game answer to immune+fortified stacks.

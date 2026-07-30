@@ -14,7 +14,7 @@ const DIST = resolve(ROOT, "dist");
 
 const EXCLUDE = new Set([
   "dist", "node_modules", ".git", ".github", ".claude",
-  "package.json", "package-lock.json", "build.mjs",
+  "scripts", "package.json", "package-lock.json", "build.mjs",
   "game.manifest.json", "AGENTS.md", ".gitignore",
 ]);
 
