@@ -5,7 +5,7 @@
   "framework": "vanilla",
   "category": "tower-defense",
   "supportsMobile": true,
-  "version": "2.0.0",
+  "version": "2.0.1",
   "multiplayer": "realtime-server",
   "multiplayerProvider": "fly-io",
   "multiplayerEndpoint": "wss://gctd-server.fly.dev",
