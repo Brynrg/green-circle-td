@@ -200,6 +200,7 @@ const PATH_CLEAR = 28;         // min distance from any path to build
 const BASE_SPEED = 145;        // px/s before speed_mult (~70s track after P2 tune)
 
 const START_GOLD = 250, START_LIVES = 20;
+const SELL_RATE = 0.7;        // refund fraction of `invested` — keep in sync with gctd-server/sim.js
 const PB_KEY = "speedrungames:green-circle-td:pb";
 const MIN_ZOOM = 0.35, MAX_ZOOM = 2.2;
 
@@ -1052,7 +1053,7 @@ class Game {
     if (this.net) { this.net.send({ t: "sell", c, r }); return; }
     const tw = this.towers[idx];
     if (this.players.length > 1 && tw.player !== this.activePlayer) return;
-    this.players[tw.player ?? 0].gold += Math.floor(tw.invested * 0.7);
+    this.players[tw.player ?? 0].gold += Math.floor(tw.invested * SELL_RATE);
     this.occupied.delete(c + "," + r);
     if (this.selectedTower === tw) this.deselectTower();
     this.towers.splice(idx, 1);
@@ -1114,7 +1115,7 @@ class Game {
       }
     }
     if (tw.dealt > 0) rows.push(["Damage dealt", Math.round(tw.dealt).toLocaleString()]);
-    rows.push(["Sell value", `${Math.floor(tw.invested * 0.7)}g`]);
+    rows.push(["Sell value", `${Math.floor(tw.invested * SELL_RATE)}g`]);
     document.getElementById("inspStats").innerHTML = rows
       .map(([k, v, tone]) => `<div><span>${k}</span><b${tone ? ` class="v-${tone}"` : ""}>${v}</b></div>`).join("");
     const actions = document.getElementById("inspActions");
@@ -1164,7 +1165,7 @@ class Game {
     }
     const sell = document.createElement("button");
     sell.className = "ibtn sell";
-    sell.innerHTML = `<span>Sell</span><span class="icost">+${Math.floor(tw.invested * 0.7)}g</span>`;
+    sell.innerHTML = `<span>Sell</span><span class="icost">+${Math.floor(tw.invested * SELL_RATE)}g</span>`;
     sell.onclick = () => this.sellAt(tw.c, tw.r);
     actions.appendChild(sell);
   }
