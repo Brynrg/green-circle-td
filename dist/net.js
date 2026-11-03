@@ -180,7 +180,10 @@
       // `color` is kept on the bullet record for shape parity but unused.
       for (const [x1, y1, x2, y2, ti] of m.sh) {
         const color = TOWERS[NET_TOWER_KEYS[ti]]?.color || "#fff";
-        if (g.bullets.length < 300) g.bullets.push({ x1, y1, x2, y2, color, t: 0.09 });
+        // Same distance-scaled flight time the offline renderer uses, so online
+        // tracers travel instead of flashing as full-length sticks.
+        const life = Math.min(0.2, Math.max(0.06, Math.hypot(x2 - x1, y2 - y1) / 1500));
+        if (g.bullets.length < 300) g.bullets.push({ x1, y1, x2, y2, color, t: life, max: life });
         g.spawnFx(x1, y1, DECAY.hot, "muzzle", Math.atan2(y2 - y1, x2 - x1));
         g.spawnFx(x2, y2, DECAY.hot, "spark");
       }

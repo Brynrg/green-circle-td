@@ -195,6 +195,7 @@ const WORLD = 1600;            // square world (px), larger than the viewport
 const CENTER = { x: WORLD / 2, y: WORLD / 2 };
 const CELL = 40, GRID = WORLD / CELL;
 const PATH_W = 34;             // visual path width
+const TOWER_PAD = 36;          // drawn pad size (CELL is 40 — leaves a 2px gutter)
 const PATH_CLEAR = 28;         // min distance from any path to build
 const BASE_SPEED = 145;        // px/s before speed_mult (~70s track after P2 tune)
 
@@ -208,6 +209,24 @@ const DIFFICULTY = {
   intense: { hp: 1.55, gold: 0.8, bounty: 0.9 },
 };
 const PRIORITIES = ["furthest", "closest", "strongest", "weakest"];
+// Armour legend, shared by the live wave pill and the next-wave preview.
+// Distinct from PLAYER_COLORS and THREAT (never reuse those two families for an
+// unrelated legend) — same tactical-instrument tonal family though.
+const ARMOR_INFO = {
+  light:     { color: "#8fd0c9", counter: "Pierce best" },
+  medium:    { color: "#a8d98f", counter: "Normal best" },
+  heavy:     { color: "#c9a35c", counter: "Siege / Magic" },
+  fortified: { color: "#9aa8c4", counter: "Siege best" },
+  hero:      { color: "#e8c468", counter: "Normal best" },
+};
+// Flag badges used wherever an enemy's special rules need to be glanceable.
+const FLAG_BADGE = {
+  air:       { icon: "✈", label: "Air — only Sniper / Rapid / Frost reach it" },
+  invisible: { icon: "◌", label: "Invisible — needs a Detector in range" },
+  immune:    { icon: "⊘", label: "Immune — ignores slow and poison" },
+  hero:      { icon: "★", label: "Hero — 4 lives if it leaks" },
+  boss:      { icon: "☠", label: "Boss — 10 lives if it leaks" },
+};
 function mulberry32(a) {
   return function () {
     a |= 0; a = a + 0x6D2B79F5 | 0;
@@ -377,6 +396,8 @@ const SFX = (() => {
     boss() { blip(170, 38, 0.5, "sawtooth", 0.3); blip(85, 30, 0.62, "triangle", 0.24, 0.05); },
     leak() { blip(460, 115, 0.26, "sawtooth", 0.24); blip(340, 85, 0.3, "sawtooth", 0.2, 0.12); },
     place() { blip(215, 340, 0.07, "triangle", 0.2); },
+    deny() { blip(190, 120, 0.1, "square", 0.12); },
+    upgrade() { blip(392, 659, 0.1, "triangle", 0.2); blip(523, 784, 0.12, "triangle", 0.14, 0.06); },
     wave() { blip(330, 494, 0.12, "square", 0.14); },
     win() { [523, 659, 784, 1047].forEach((f, i) => blip(f, f, 0.16, "triangle", 0.18, i * 0.12)); },
     lose() { [392, 330, 262, 196].forEach((f, i) => blip(f, f * 0.94, 0.2, "sawtooth", 0.18, i * 0.14)); },
@@ -518,11 +539,16 @@ class Game {
   cellOf(wx, wy) { return { c: Math.floor(wx / CELL), r: Math.floor(wy / CELL) }; }
   cellCenter(c, r) { return { x: c * CELL + CELL / 2, y: r * CELL + CELL / 2 }; }
   cellBuildable(c, r) {
-    if (c < 0 || c >= GRID || r < 0 || r >= GRID) return false;
-    if (this.occupied.has(c + "," + r)) return false;
-    if (this.players.length > 1 && cellOwner(c, r, this.players.length) !== this.activePlayer) return false;
+    return this.buildBlocker(c, r) === null;
+  }
+  /** Why a cell can't be built on, or null when it can. Drives the refusal toast. */
+  buildBlocker(c, r) {
+    if (c < 0 || c >= GRID || r < 0 || r >= GRID) return "Off the arena";
+    if (this.occupied.has(c + "," + r)) return "Pad occupied";
+    if (this.players.length > 1 && cellOwner(c, r, this.players.length) !== this.activePlayer) return "Not your zone";
     const ctr = this.cellCenter(c, r);
-    return distToPaths(ctr.x, ctr.y) > PATH_CLEAR;
+    if (distToPaths(ctr.x, ctr.y) <= PATH_CLEAR) return "On the lane";
+    return null;
   }
 
   // ---- UI
@@ -600,6 +626,7 @@ class Game {
     livesEl.classList.toggle("low", this.lives <= 5 && this.state !== "won");
     if (this.selectedTower) this.renderInspector();
     if (this.renderPlayerPanel) this.renderPlayerPanel();
+    this.renderNextWave();
   }
   renderPB() { document.getElementById("pb").textContent = this.pb == null ? "PB —" : "PB " + fmt(this.pb); }
   setWaveText(name, hint) {
@@ -610,15 +637,6 @@ class Game {
     const el = document.getElementById("armorPill");
     if (!el) return;
     if (!types || !types.length) { el.classList.add("hidden"); return; }
-    // Distinct from PLAYER_COLORS and THREAT (never reuse those two families
-    // for an unrelated legend) — same tactical-instrument tonal family though.
-    const ARMOR_INFO = {
-      light:     { color: "#8fd0c9", counter: "Pierce best" },
-      medium:    { color: "#a8d98f", counter: "Normal best" },
-      heavy:     { color: "#c9a35c", counter: "Siege / Magic" },
-      fortified: { color: "#9aa8c4", counter: "Siege best" },
-      hero:      { color: "#e8c468", counter: "Normal best" },
-    };
     const unique = [...new Set(types)];
     el.innerHTML = unique.map((a) => {
       const info = ARMOR_INFO[a] || { color: "#e8f3ea", counter: "?" };
@@ -626,6 +644,55 @@ class Game {
     }).join("");
     if (hasAir) el.innerHTML += `<span class="apill" style="border-color:#8fd0c977;color:#8fd0c9;background:#8fd0c918">✈ Air · anti-air only</span>`;
     el.classList.remove("hidden");
+  }
+
+  /**
+   * Scouting report for the wave you have NOT sent yet: composition, armour and
+   * the flags that decide whether your current board can even touch it. The WC3
+   * original made you learn this by leaking; here you can plan the buy.
+   * Cheap to call — the body is only rebuilt when the described wave changes.
+   */
+  renderNextWave() {
+    const panel = document.getElementById("nextPanel");
+    if (!panel) return;
+    const w = this.waves?.[this.waveIndex];
+    // Shown in "ready" too — the pre-wave-1 buy is exactly when scouting pays.
+    const playing = this.state === "ready" || this.state === "running" || this.state === "paused";
+    if (!w || !playing) { panel.classList.add("hidden"); this._nextKey = null; return; }
+    panel.classList.remove("hidden");
+    if (this._nextKey === w.id) return;
+    this._nextKey = w.id;
+
+    document.getElementById("nextNum").textContent = `${w.id} · ${w.name}`;
+    const diff = DIFFICULTY[this.difficulty] || DIFFICULTY.normal;
+    const hpBase = Math.round(40 * Math.pow(1.1, this.waveIndex) * diff.hp);
+
+    // Merge spawn groups of the same enemy so "8 + 8 Air" reads as "16 Air".
+    const merged = new Map();
+    for (const sp of w.spawns) {
+      const e = ENEMIES[sp.e];
+      const n = Math.max(1, sp.n + e.count_bonus);
+      merged.set(sp.e, (merged.get(sp.e) || 0) + n);
+    }
+    const rows = [...merged].map(([name, n]) => {
+      const e = ENEMIES[name];
+      const badges = e.flags.map((f) => FLAG_BADGE[f]
+        ? `<span class="nwflag" title="${FLAG_BADGE[f].label}">${FLAG_BADGE[f].icon}</span>` : "").join("");
+      const info = ARMOR_INFO[e.armor] || { color: "#e8f3ea" };
+      return `<div class="nwrow">
+        <span class="nwdot" style="background:${e.color}"></span>
+        <span class="nwn">${n}×</span>
+        <span class="nwname">${name}</span>
+        ${badges}
+        <span class="nwarm" style="color:${info.color}">${e.armor}</span>
+        <span class="nwhp">${Math.round(hpBase * e.health_mult)}hp</span>
+      </div>`;
+    }).join("");
+
+    const armors = [...new Set(w.spawns.map((sp) => ENEMIES[sp.e].armor))];
+    const counters = [...new Set(armors.map((a) => (ARMOR_INFO[a] || {}).counter).filter(Boolean))];
+    document.getElementById("nextBody").innerHTML =
+      rows + `<div class="nwfoot">${counters.join(" · ")} · bounty pool ${w.reward}g</div>`;
   }
 
   hideOverlay() { const o = document.getElementById("overlay"); o.className = "overlay hidden"; o.innerHTML = ""; }
@@ -933,7 +1000,15 @@ class Game {
 
   build(c, r, type) {
     const def = TOWERS[type];
-    if (this.gold < def.cost || !this.cellBuildable(c, r)) return false;
+    const blocked = this.buildBlocker(c, r);
+    if (blocked || this.gold < def.cost) {
+      // Silent refusals used to look like a dead click — say why, at the cursor.
+      const ctr = this.cellCenter(clamp(c, 0, GRID - 1), clamp(r, 0, GRID - 1));
+      const why = blocked || `Need ${def.cost - this.gold}g more`;
+      this.spawnFx(ctr.x, ctr.y - 14, THREAT.crit, "text", 0, { txt: why });
+      SFX.deny();
+      return false;
+    }
     if (this.net) { this.net.send({ t: "build", c, r, tower: type }); return true; } // server confirms via towers sync
     const ctr = this.cellCenter(c, r);
     this.towers.push({ c, r, x: ctr.x, y: ctr.y, type, def, level: 1, spec: null, invested: def.cost, s: statsFor(type, 1, null), lastFire: -999, dmgMult: 1, cdMult: 1, angle: -Math.PI / 2, player: this.activePlayer, priority: "furthest", recoil: 0, pop: 0.25 });
@@ -950,15 +1025,22 @@ class Game {
     if (!tw || this.state !== "running") return;
     if (this.net) { this.net.send({ t: "upgrade", c: tw.c, r: tw.r, choice }); return; }
     if (this.players.length > 1 && tw.player !== this.activePlayer) return;
+    const deny = (cost) => {
+      this.spawnFx(tw.x, tw.y - 18, THREAT.crit, "text", 0, { txt: `Need ${cost - this.gold}g more` });
+      SFX.deny();
+    };
     if (choice === "level" && tw.level < MAX_LEVEL) {
       const cost = upgradeCost(tw.type, tw.level);
-      if (this.gold < cost) return;
+      if (this.gold < cost) return deny(cost);
       this.players[this.activePlayer].gold -= cost; tw.invested += cost; tw.level++;
     } else if (tw.level >= MAX_LEVEL && !tw.spec && hasSpec(tw.type) && SPECS[tw.type].some((x) => x.id === choice)) {
       const cost = specCost(tw.type);
-      if (this.gold < cost) return;
+      if (this.gold < cost) return deny(cost);
       this.players[this.activePlayer].gold -= cost; tw.invested += cost; tw.spec = choice;
     } else return;
+    SFX.upgrade();
+    tw.pop = 0.25;
+    this.spawnFx(tw.x, tw.y, DECAY.hot, "build");
     tw.s = statsFor(tw.type, tw.level, tw.spec);
     this.recomputeAuras();
     this.refreshButtons();
@@ -1019,7 +1101,22 @@ class Game {
     if (s.poison) rows.push(["Poison", `${s.poison}/t`]);
     if (s.multishot) rows.push(["Targets", s.multishot]);
     if (s.canAir) rows.push(["Anti-Air", "✓"]);
-    document.getElementById("inspStats").innerHTML = rows.map(([k, v]) => `<div><span>${k}</span><b>${v}</b></div>`).join("");
+    // Live effectiveness: the armour matrix is the heart of the game, but until
+    // now you had to hold it in your head. Show what this tower's damage type is
+    // actually worth against the creeps currently on the field.
+    if (s.dtype) {
+      const live = [...new Set(this.enemies.filter((e) => e.hp > 0).map((e) => e.armor))];
+      if (live.length) {
+        const mults = live.map((a) => ARMOR_MATRIX[s.dtype][a] ?? 1);
+        const lo = Math.min(...mults), hi = Math.max(...mults);
+        const tone = hi < 1 ? "bad" : lo >= 1.25 ? "good" : "";
+        rows.push(["Vs field", lo === hi ? `×${lo}` : `×${lo}–${hi}`, tone]);
+      }
+    }
+    if (tw.dealt > 0) rows.push(["Damage dealt", Math.round(tw.dealt).toLocaleString()]);
+    rows.push(["Sell value", `${Math.floor(tw.invested * 0.7)}g`]);
+    document.getElementById("inspStats").innerHTML = rows
+      .map(([k, v, tone]) => `<div><span>${k}</span><b${tone ? ` class="v-${tone}"` : ""}>${v}</b></div>`).join("");
     const actions = document.getElementById("inspActions");
     actions.innerHTML = "";
     const mkBtn = (label, cost, fn, sub, primary) => {
@@ -1316,23 +1413,34 @@ class Game {
       if (d.dtype) this.spawnFx(tw.x, tw.y, DECAY.hot, "muzzle", Math.atan2(targets[0].y - tw.y, targets[0].x - tw.x), { dtype: d.dtype });
       tw.recoil = 1;
       for (const target of targets) {
-        this.bullets.push({ x1: tw.x, y1: tw.y, x2: target.x, y2: target.y, color: tw.def.color, t: 0.09, dtype: d.dtype });
+        // Visual-only flight time: damage already resolved above, so this never
+        // changes the sim (and so never diverges from the authoritative server).
+        // It exists because an instant full-length beam reads as a static stick.
+        const life = clamp(Math.hypot(target.x - tw.x, target.y - tw.y) / 1500, 0.06, 0.2);
+        this.bullets.push({ x1: tw.x, y1: tw.y, x2: target.x, y2: target.y, color: tw.def.color, t: life, max: life, dtype: d.dtype });
         if (d.splash) {
           this.spawnFx(target.x, target.y, tw.def.color, "splash", 0, { r: d.splash });
           for (const en of this.enemies) {
-            if (en.hp <= 0) continue;
+            // Splash obeys the same targeting rules as a direct shot: a ground-only
+            // tower never clips flyers, and un-revealed invisibles are untouchable.
+            if (!this.canHit(tw, en)) continue;
             if (Math.hypot(en.x - target.x, en.y - target.y) <= d.splash) this.hit(en, base, d, tw);
           }
         } else this.hit(target, base, d, tw);
       }
     }
   }
+  /** Single source of truth for "may this tower damage this enemy at all". */
+  canHit(tw, en) {
+    if (en.hp <= 0) return false;
+    if (en.flags.includes("invisible") && !en.revealed) return false;
+    if (en.flags.includes("air") && !tw.s.canAir) return false;
+    return true;
+  }
   pickTargets(tw, n) {
     const inRange = [];
     for (const en of this.enemies) {
-      if (en.hp <= 0) continue;
-      if (en.flags.includes("invisible") && !en.revealed) continue;
-      if (en.flags.includes("air") && !tw.s.canAir) continue;
+      if (!this.canHit(tw, en)) continue;
       if (Math.hypot(en.x - tw.x, en.y - tw.y) > tw.s.range) continue;
       if (en.path) {
         const last = en.path.length - 1;
@@ -1389,7 +1497,12 @@ class Game {
   hit(en, base, d, tw) {
     if (en.hp <= 0) return;
     const mult = d.dtype ? (ARMOR_MATRIX[d.dtype][en.armor] ?? 1) : 1;
-    if (tw) en.lastHitPlayer = tw.player ?? 0;
+    if (tw) {
+      en.lastHitPlayer = tw.player ?? 0;
+      // Effective damage, overkill excluded — this is the number the inspector
+      // reports, so it has to mean "HP actually removed", not "HP swung at".
+      tw.dealt = (tw.dealt || 0) + Math.min(en.hp, base * mult);
+    }
     en.hp -= base * mult;
     const immune = en.flags.includes("immune");
     if (d.slow && !immune) {
@@ -1472,9 +1585,11 @@ class Game {
     const g = cv.getContext("2d");
     g.clearRect(0, 0, WORLD, WORLD);
 
-    // Martian night — warm void radial
+    // Martian night — warm void radial. Values sit higher than the v2.3 field so
+    // the lane trenches below can read as *darker* than the ground they cut through;
+    // before this the lane and the ground were within a few points of luminance.
     const vg = g.createRadialGradient(CENTER.x, CENTER.y, 0, CENTER.x, CENTER.y, WORLD * 0.85);
-    vg.addColorStop(0, "#1c0e0a"); vg.addColorStop(0.45, VOID_INNER); vg.addColorStop(1, VOID_OUTER);
+    vg.addColorStop(0, "#241309"); vg.addColorStop(0.45, "#190d09"); vg.addColorStop(1, "#100706");
     g.fillStyle = vg; g.fillRect(0, 0, WORLD, WORLD);
 
     // Dust / regolith speckles (seeded, stable)
@@ -1540,37 +1655,67 @@ class Game {
       g.restore();
     }
 
+    // Build plates — the single biggest readability fix. Before this, buildable
+    // ground was indistinguishable from dead space, so players clicked blind.
+    // Every legal pad gets a raised regolith plate; pads inside tower-range of a
+    // lane are tinted warmer, so prime real estate is visible before you commit.
+    this.buildableCells = [];
+    for (let c = 0; c < GRID; c++) {
+      for (let r = 0; r < GRID; r++) {
+        const x = c * CELL + CELL / 2, y = r * CELL + CELL / 2;
+        const d = distToPaths(x, y);
+        if (d <= PATH_CLEAR) continue;
+        this.buildableCells.push([c, r]);
+        const prime = d < PATH_CLEAR + 60;              // inside most towers' first ring
+        const px = c * CELL + 4, py = r * CELL + 4, pw = CELL - 8;
+        g.fillStyle = prime ? "rgba(78,56,42,.34)" : "rgba(52,40,33,.26)";
+        this.round(px, py, pw, pw, 4, g); g.fill();
+        // top-left bevel so the plate reads as raised hardware, not a flat swatch
+        g.strokeStyle = prime ? "rgba(201,163,92,.18)" : "rgba(170,140,100,.07)";
+        g.lineWidth = 1;
+        g.beginPath(); g.moveTo(px + 0.5, py + pw - 2); g.lineTo(px + 0.5, py + 0.5); g.lineTo(px + pw - 2, py + 0.5); g.stroke();
+        g.strokeStyle = "rgba(8,4,3,.4)";
+        g.beginPath(); g.moveTo(px + pw - 0.5, py + 2); g.lineTo(px + pw - 0.5, py + pw - 0.5); g.lineTo(px + 2, py + pw - 0.5); g.stroke();
+      }
+    }
+
     // Path trenches — mined shafts / Iron Rain approach lanes (rust floor + gold core)
     g.lineCap = "round"; g.lineJoin = "round";
     for (let k = 0; k < 4; k++) {
       for (let f = 0; f < 2; f++) {
         const path = PATH_VARIANTS[k][f];
         const alt = f === 1;
-        g.strokeStyle = alt ? "rgba(60,28,22,.3)" : "rgba(55,24,18,.72)";
-        g.lineWidth = PATH_W;
-        if (alt) g.setLineDash([8, 10]);
-        g.beginPath(); g.moveTo(path[0][0], path[0][1]);
-        for (let i = 1; i < path.length; i++) g.lineTo(path[i][0], path[i][1]);
-        g.stroke();
-        if (!alt) {
+        const trace = () => {
+          g.beginPath(); g.moveTo(path[0][0], path[0][1]);
+          for (let i = 1; i < path.length; i++) g.lineTo(path[i][0], path[i][1]);
+          g.stroke();
+        };
+        if (alt) {
+          // Fork lane (seeded CCW variant) — dashed ghost so it never competes
+          // with the primary lane for attention, but is still plainly a lane.
+          g.setLineDash([9, 11]);
+          g.strokeStyle = "rgba(14,7,5,.62)"; g.lineWidth = PATH_W; trace();
+          g.strokeStyle = "rgba(139,58,47,.55)"; g.lineWidth = 1.6; trace();
           g.setLineDash([]);
-          g.strokeStyle = "rgba(20,8,6,.7)"; g.lineWidth = PATH_W - 10; g.stroke();
-          g.strokeStyle = RUST; g.globalAlpha = 0.85; g.lineWidth = 2.4; g.stroke();
-          g.strokeStyle = DECAY.after; g.globalAlpha = 0.55; g.lineWidth = 1.2; g.stroke();
-          g.globalAlpha = 1;
-          g.strokeStyle = "rgba(74,58,50,.4)"; g.lineWidth = 1;
-          for (let i = 0; i < path.length - 1; i++) {
-            const ax = path[i][0], ay = path[i][1], bx = path[i + 1][0], by = path[i + 1][1];
-            const len = Math.hypot(bx - ax, by - ay) || 1;
-            const nx = -(by - ay) / len, ny = (bx - ax) / len;
-            for (let d = 20; d < len; d += 40) {
-              const x = ax + (bx - ax) * (d / len), y = ay + (by - ay) * (d / len);
-              g.beginPath(); g.moveTo(x + nx * 6, y + ny * 6); g.lineTo(x - nx * 6, y - ny * 6); g.stroke();
-            }
+          continue;
+        }
+        // Primary lane: bright kerb rail, then a much darker trench floor cut
+        // into it. The kerb/floor value gap is what makes the lane legible.
+        g.strokeStyle = "rgba(146,80,52,.80)"; g.lineWidth = PATH_W; trace();          // kerb
+        g.strokeStyle = "rgba(10,5,4,.96)";   g.lineWidth = PATH_W - 7; trace();       // trench floor
+        g.strokeStyle = "rgba(44,22,16,.9)";  g.lineWidth = PATH_W - 13; trace();      // worn centre
+        g.strokeStyle = DECAY.after; g.globalAlpha = 0.5; g.lineWidth = 1.4; trace();  // hot core line
+        g.globalAlpha = 1;
+        // Sleepers across the trench — give the lane texture and a sense of travel
+        g.strokeStyle = "rgba(201,163,92,.22)"; g.lineWidth = 1;
+        for (let i = 0; i < path.length - 1; i++) {
+          const ax = path[i][0], ay = path[i][1], bx = path[i + 1][0], by = path[i + 1][1];
+          const len = Math.hypot(bx - ax, by - ay) || 1;
+          const nx = -(by - ay) / len, ny = (bx - ax) / len;
+          for (let d = 20; d < len; d += 36) {
+            const x = ax + (bx - ax) * (d / len), y = ay + (by - ay) * (d / len);
+            g.beginPath(); g.moveTo(x + nx * 9, y + ny * 9); g.lineTo(x - nx * 9, y - ny * 9); g.stroke();
           }
-        } else {
-          g.strokeStyle = RUST; g.globalAlpha = 0.3; g.lineWidth = 1.5; g.stroke();
-          g.globalAlpha = 1; g.setLineDash([]);
         }
       }
     }
@@ -1669,7 +1814,14 @@ class Game {
 
     tctx.globalAlpha = 0.4; tctx.strokeStyle = DECAY.hot; tctx.lineWidth = 3;
     for (const b of this.bullets) {
-      tctx.beginPath(); tctx.moveTo(b.x1, b.y1); tctx.lineTo(b.x2, b.y2); tctx.stroke();
+      // Burn only the stretch the bolt has actually flown, so the ember trail
+      // grows behind it instead of flashing the whole line at once.
+      const p = 1 - clamp(b.t / (b.max || 0.09), 0, 1);
+      const tail = Math.max(0, p - 0.42);
+      tctx.beginPath();
+      tctx.moveTo(b.x1 + (b.x2 - b.x1) * tail, b.y1 + (b.y2 - b.y1) * tail);
+      tctx.lineTo(b.x1 + (b.x2 - b.x1) * p, b.y1 + (b.y2 - b.y1) * p);
+      tctx.stroke();
     }
 
     tctx.globalAlpha = 1;
@@ -1700,6 +1852,8 @@ class Game {
 
     // cached static world layer (void gradient + range rings + bezel + paths + ticks)
     ctx.drawImage(this.staticLayer, 0, 0, WORLD, WORLD);
+    this.drawLaneFlow(ctx);
+    this.drawSpawnGates(ctx);
 
     // Gold Society pit beacon — intensity tracks leak threat / boss / low lives
     const threat = this._centerThreat || 0;
@@ -1775,11 +1929,16 @@ class Game {
     ctx.save();
     ctx.globalCompositeOperation = "lighter";
     for (const b of this.bullets) {
-      const a = clamp(b.t / 0.09, 0, 1);
-      ctx.strokeStyle = DECAY.core; ctx.lineWidth = 5; ctx.globalAlpha = a * 0.4;
-      ctx.beginPath(); ctx.moveTo(b.x1, b.y1); ctx.lineTo(b.x2, b.y2); ctx.stroke();
-      ctx.strokeStyle = DECAY.hot; ctx.lineWidth = 2; ctx.globalAlpha = a;
-      ctx.beginPath(); ctx.moveTo(b.x1, b.y1); ctx.lineTo(b.x2, b.y2); ctx.stroke();
+      const p = 1 - clamp(b.t / (b.max || 0.09), 0, 1);          // 0 → 1 along the shot
+      const tail = Math.max(0, p - 0.42);
+      const hx = b.x1 + (b.x2 - b.x1) * p,    hy = b.y1 + (b.y2 - b.y1) * p;
+      const sx = b.x1 + (b.x2 - b.x1) * tail, sy = b.y1 + (b.y2 - b.y1) * tail;
+      ctx.strokeStyle = b.color || DECAY.core; ctx.lineWidth = 4.5; ctx.globalAlpha = 0.34;
+      ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(hx, hy); ctx.stroke();
+      ctx.strokeStyle = DECAY.hot; ctx.lineWidth = 1.8; ctx.globalAlpha = 0.95;
+      ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(hx, hy); ctx.stroke();
+      ctx.fillStyle = DECAY.hot; ctx.globalAlpha = 1;
+      ctx.beginPath(); ctx.arc(hx, hy, 2.4, 0, 7); ctx.fill();
     }
     ctx.globalAlpha = 1;
     ctx.restore();
@@ -1798,6 +1957,73 @@ class Game {
     this.drawVignette(); // screen-space radial gradient — darkens edges, focuses center
     this.drawMinimap();  // minimap draws over vignette
     ctx.lineWidth = 1;
+  }
+
+  /**
+   * Chevrons drifting along each primary lane toward the centre. The static
+   * trench says "this is a road"; this says which way the road runs — which the
+   * four-corner spiral badly needs, because a lane doubles back on itself.
+   * Segments outside the camera are skipped, so cost tracks what you can see.
+   */
+  drawLaneFlow(ctx) {
+    const SPACING = 130, SPEED = 42;
+    const phase = this.reducedMotion ? 0 : (this.gameTime * SPEED) % SPACING;
+    const vx0 = this.cam.x - 40, vy0 = this.cam.y - 40;
+    const vx1 = this.cam.x + this.cssW / this.cam.zoom + 40, vy1 = this.cam.y + this.cssH / this.cam.zoom + 40;
+    ctx.save();
+    ctx.globalAlpha = 0.3;
+    ctx.strokeStyle = DECAY.mid;
+    ctx.lineWidth = 2;
+    ctx.lineCap = "round";
+    for (let k = 0; k < 4; k++) {
+      const path = PATH_VARIANTS[k][0];
+      let carried = 0;
+      for (let i = 0; i < path.length - 1; i++) {
+        const ax = path[i][0], ay = path[i][1], bx = path[i + 1][0], by = path[i + 1][1];
+        const len = Math.hypot(bx - ax, by - ay) || 1;
+        const visible = Math.max(ax, bx) >= vx0 && Math.min(ax, bx) <= vx1 &&
+                        Math.max(ay, by) >= vy0 && Math.min(ay, by) <= vy1;
+        if (visible) {
+          const ux = (bx - ax) / len, uy = (by - ay) / len, nx = -uy, ny = ux;
+          for (let d = ((SPACING - ((carried + phase) % SPACING)) % SPACING); d < len; d += SPACING) {
+            const x = ax + ux * d, y = ay + uy * d;
+            ctx.beginPath();
+            ctx.moveTo(x - ux * 5 + nx * 5, y - uy * 5 + ny * 5);
+            ctx.lineTo(x + ux * 5, y + uy * 5);
+            ctx.lineTo(x - ux * 5 - nx * 5, y - uy * 5 - ny * 5);
+            ctx.stroke();
+          }
+        }
+        carried += len;
+      }
+    }
+    ctx.restore();
+  }
+
+  /**
+   * Corner gates light up while their lane is feeding creeps. In a four-corner
+   * map the player otherwise has to scan the whole arena to find the pressure.
+   */
+  drawSpawnGates(ctx) {
+    const hot = [false, false, false, false];
+    for (const s of this.spawnQueue) if (s.corner != null) hot[s.corner] = true;
+    for (const en of this.enemies) if (en.hp > 0 && en.corner != null && en.wp < 3) hot[en.corner] = true;
+    const t = this.gameTime;
+    ENTRIES.forEach(([sx, sy], i) => {
+      const live = hot[i];
+      const pulse = this.reducedMotion ? 0.6 : 0.5 + 0.5 * Math.sin(t * 4 - i);
+      ctx.save();
+      ctx.globalAlpha = live ? 0.5 + pulse * 0.45 : 0.22;
+      ctx.strokeStyle = live ? SCARLET : BEZEL;
+      ctx.lineWidth = live ? 2.6 : 1.4;
+      ctx.beginPath(); ctx.arc(sx, sy, 20 + (live ? pulse * 5 : 0), 0, 7); ctx.stroke();
+      if (live) {
+        ctx.globalAlpha = 0.3 * pulse;
+        ctx.fillStyle = SCARLET;
+        ctx.beginPath(); ctx.arc(sx, sy, 16, 0, 7); ctx.fill();
+      }
+      ctx.restore();
+    });
   }
 
   // ---- procedural sprites (Iron Rain / Society castes)
@@ -1819,29 +2045,44 @@ class Game {
   getDecayGradient(ctx, rad) { return this.getCasteGradient(ctx, rad, DECAY.core); }
 
   // PulseArmor housing — iron plate + gold studs (cached per tower instance)
-  buildTowerBezel() {
-    const S = 32, R = S / 2;
-    const cv = document.createElement("canvas"); cv.width = S; cv.height = S;
+  buildTowerBezel(col) {
+    // Authored at 2× and drawn at PAD world px, so the pad stays crisp when the
+    // player zooms in (the old 1:1 bitmap went soft past 1× zoom).
+    // `col` is the tower's type hue, baked into the core: at the default zoom a
+    // pad is ~15 screen px, far too small to identify from a thin accent rim, so
+    // the type colour has to be the loudest thing on the pad.
+    const SS = 2, S = TOWER_PAD, R = S / 2, k = S / 32;
+    const cv = document.createElement("canvas"); cv.width = S * SS; cv.height = S * SS;
     const g = cv.getContext("2d");
-    g.fillStyle = "#1a100c";
-    this.round(1, 1, S - 2, S - 2, 5, g); g.fill();
+    g.scale(SS, SS);
+    // Grounding shadow so the pad sits on the plate instead of floating on it
+    const sh = g.createRadialGradient(R, R + 1.5 * k, 6 * k, R, R + 1.5 * k, 17 * k);
+    sh.addColorStop(0, "rgba(0,0,0,.65)"); sh.addColorStop(1, "rgba(0,0,0,0)");
+    g.fillStyle = sh; g.fillRect(0, 0, S, S);
+    g.fillStyle = "#0d0705";                               // darker than any build plate
+    this.round(1, 1, S - 2, S - 2, 5 * k, g); g.fill();
     // Hex pad silhouette
-    g.fillStyle = "#2a1a14";
+    g.fillStyle = "#241611";
     g.beginPath();
     for (let i = 0; i < 6; i++) {
       const a = (i / 6) * Math.PI * 2 - Math.PI / 6;
-      const px = R + Math.cos(a) * 13, py = R + Math.sin(a) * 13;
+      const px = R + Math.cos(a) * 13 * k, py = R + Math.sin(a) * 13 * k;
       i ? g.lineTo(px, py) : g.moveTo(px, py);
     }
     g.closePath(); g.fill();
-    g.strokeStyle = BEZEL; g.lineWidth = 1.5; g.stroke();
-    g.fillStyle = "#3a241c"; g.beginPath(); g.arc(R, R, 9, 0, Math.PI * 2); g.fill();
-    g.strokeStyle = BRASS; g.lineWidth = 1.2; g.globalAlpha = 0.85;
-    g.beginPath(); g.arc(R, R, 11, 0, Math.PI * 2); g.stroke();
+    g.strokeStyle = BEZEL; g.lineWidth = 1.5 * k; g.stroke();
+    // Type-coloured core — the glanceable identity of the tower
+    const core = g.createRadialGradient(R - 2.5 * k, R - 2.5 * k, 1, R, R, 9.5 * k);
+    core.addColorStop(0, "#ffffff"); core.addColorStop(0.28, col); core.addColorStop(1, "#1b0f0b");
+    g.fillStyle = core; g.beginPath(); g.arc(R, R, 9.5 * k, 0, Math.PI * 2); g.fill();
+    g.strokeStyle = "rgba(0,0,0,.55)"; g.lineWidth = 1.2 * k;
+    g.beginPath(); g.arc(R, R, 9.5 * k, 0, Math.PI * 2); g.stroke();
+    g.strokeStyle = BRASS; g.lineWidth = 1.4 * k; g.globalAlpha = 0.9;
+    g.beginPath(); g.arc(R, R, 12 * k, 0, Math.PI * 2); g.stroke();
     g.globalAlpha = 1; g.fillStyle = BRASS;
     for (let i = 0; i < 6; i++) {
       const a = (i / 6) * Math.PI * 2 - Math.PI / 6;
-      g.beginPath(); g.arc(R + Math.cos(a) * 13, R + Math.sin(a) * 13, 1.6, 0, Math.PI * 2); g.fill();
+      g.beginPath(); g.arc(R + Math.cos(a) * 13 * k, R + Math.sin(a) * 13 * k, 1.7 * k, 0, Math.PI * 2); g.fill();
     }
     return cv;
   }
@@ -1863,9 +2104,10 @@ class Game {
     // `pop` may be absent on server-mirrored towers (net.js) — guard with ??.
     if ((tw.pop ?? 0) > 0) tw.pop = Math.max(0, tw.pop - dt);
 
-    if (!tw._bezel) tw._bezel = this.buildTowerBezel();
+    if (!tw._bezel) tw._bezel = this.buildTowerBezel(col);
     const popSc = this.reducedMotion || !(tw.pop > 0) ? 1 : 1 + 0.22 * Math.sin((tw.pop / 0.25) * Math.PI);
-    ctx.drawImage(tw._bezel, x - 16 * popSc, y - 16 * popSc, 32 * popSc, 32 * popSc);
+    const half = (TOWER_PAD / 2) * popSc;
+    ctx.drawImage(tw._bezel, x - half, y - half, TOWER_PAD * popSc, TOWER_PAD * popSc);
 
     const hover = this.hoverWorld && Math.hypot(this.hoverWorld.x - x, this.hoverWorld.y - y) < CELL;
     if (s.range > 0 && (selected || hover)) {
@@ -1995,7 +2237,9 @@ class Game {
 
   drawCreep(ctx, en) {
     const t = this.gameTime, boss = en.flags.includes("boss"), hero = en.flags.includes("hero"), air = en.flags.includes("air");
-    const rad = boss ? 17 : hero ? 12 : en.enemy === "Swarm" ? 6 : 9;
+    // Radii up ~20% over v2.3: at default zoom the old sizes rendered as specks
+    // once the ground stopped being pure black.
+    const rad = boss ? 21 : hero ? 15 : en.enemy === "Swarm" ? 7.5 : 11;
     const inv = en.flags.includes("invisible") && !en.revealed;
     const ang = en.path
       ? Math.atan2(en.path[Math.min(en.wp + 1, en.path.length - 1)][1] - en.y, en.path[Math.min(en.wp + 1, en.path.length - 1)][0] - en.x)
@@ -2004,7 +2248,18 @@ class Game {
     const lift = air ? 7 + bob * 2 : 0;
     const tier = boss || hero ? "crit" : (en.flags.includes("immune") || en.enemy === "Armored") ? "warn" : "base";
     const rim = tier === "crit" ? (hero ? DECAY.core : THREAT.crit) : tier === "warn" ? THREAT.warn : en.color;
-    if (air) { ctx.fillStyle = "rgba(0,0,0,.28)"; ctx.beginPath(); ctx.ellipse(en.x, en.y + rad + 4, rad * 0.9, rad * 0.4, 0, 0, 7); ctx.fill(); }
+    if (air) { ctx.fillStyle = "rgba(0,0,0,.34)"; ctx.beginPath(); ctx.ellipse(en.x, en.y + rad + 4, rad * 0.9, rad * 0.4, 0, 0, 7); ctx.fill(); }
+    // Contact shadow under every unit. The lit regolith plates mean a unit can no
+    // longer rely on a black field for its silhouette — this is what separates it.
+    if (!inv) {
+      ctx.save();
+      ctx.globalAlpha = air ? 0.3 : 0.5;
+      const sh = ctx.createRadialGradient(en.x, en.y - lift, rad * 0.4, en.x, en.y - lift, rad * 1.5);
+      sh.addColorStop(0, "rgba(0,0,0,.75)"); sh.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.fillStyle = sh;
+      ctx.beginPath(); ctx.arc(en.x, en.y - lift, rad * 1.5, 0, 7); ctx.fill();
+      ctx.restore();
+    }
     ctx.save(); ctx.globalAlpha = inv ? 0.22 : 1; ctx.translate(en.x, en.y - lift);
     ctx.fillStyle = this.getCasteGradient(ctx, rad, en.color);
     if (en.enemy === "Swift") {
@@ -2056,8 +2311,8 @@ class Game {
     }
     {
       const ga = ctx.globalAlpha, ringR = rad + (boss ? 3 : hero ? 2.5 : 1.8);
-      ctx.strokeStyle = rim; ctx.lineWidth = tier === "base" ? 1.3 : 1.9;
-      ctx.globalAlpha = ga * (tier === "base" ? 0.65 : 0.92);
+      ctx.strokeStyle = rim; ctx.lineWidth = tier === "base" ? 1.8 : 2.4;
+      ctx.globalAlpha = ga * (tier === "base" ? 0.9 : 1);
       ctx.beginPath(); ctx.arc(0, 0, ringR, 0, 7); ctx.stroke();
       ctx.lineWidth = 1;
       for (const da of [-0.55, 0.55]) {

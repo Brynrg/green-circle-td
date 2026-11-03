@@ -33,7 +33,8 @@ you can (speedrun).
 - **11 towers** — Basic, Sniper, Rapid, Splash (AoE), Frost (slow), Poison
   (DoT), Detector (reveals invisibles), Damage Aura (+20% nearby), Speed Aura
   (−15% cooldown nearby), Mint (+gold per wave cleared), Void (chaos damage).
-  Lv1→3 upgrades, then a 2-way specialization on attackers.
+  Lv1→3 upgrades, then a **3-way specialization** — every tower, including the
+  aura, Mint and Detector families, has three Lv3 branches.
 - **Air-targeting restriction** — only Sniper, Rapid, and Frost can hit air
   (✈). Flying waves force dedicated anti-air, like the WC3 original.
 - **9 enemy types** with flags — air, immune (to slow/poison), invisible (needs
@@ -44,6 +45,13 @@ you can (speedrun).
 - **Economy** — kill bounties (to the killing tower's owner), wave-clear
   rewards (split in co-op), Mint income, 2% interest (capped), +15g
   stack-a-wave-early bonus.
+- **Next-wave scouting report** — the sidebar shows the composition, armour
+  class, per-creep HP, flag badges (air / invisible / immune / hero / boss) and
+  bounty pool of the wave you have *not* sent yet, so the buy is a decision
+  rather than a guess. The WC3 original makes you learn each wave by leaking it.
+- **Live armour read-out** — a selected tower reports what its damage type is
+  actually worth (`Vs field ×0.35`–`×2`) against the creeps on the board right
+  now, plus the effective damage it has dealt and its sell value.
 
 ## Camera & controls
 
