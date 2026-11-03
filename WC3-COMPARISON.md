@@ -154,20 +154,22 @@ tower; ours rewards spreading it.**
 - Authoritative server; no Warcraft III install required; runs on a phone.
 - Our win condition actually ends the game.
 
+## Closed in v3.0.0
+
+Four of the gaps below were closed by porting the mechanics this document
+describes: the recoverable overrun meter replaces lives, the armour matrix is
+flattened to the original's real 0.75–1.30 band with Divine walls that only
+Chaos opens, tower downgrade is in, and the wave schedule is fixed and
+published. What remains is listed next.
+
 ## Where the original still leads
 
 - **36 waves vs our 30**; 8 players vs our 4.
-- **Recoverable leak pressure** instead of permanent life loss.
-- **Tower downgrade** to recover misallocated gold.
-- **A published, fixed schedule.** The forks print the armour class of all 36 levels
-  on request. Our randomised order removes that axis entirely — knowing 7/17/23/27/35
-  are air and pre-building for them *is* the original's skill expression. This is a
-  trade we made, not an improvement; the earlier version of this document wrongly
-  listed it as a straight win.
 - **A tower ladder with increasing returns**, which makes the gold decision
   interesting for the whole game rather than only until everything is Lv3.
-- **8 armour classes** including Unarmored and Divine; our 5 have no equivalent of a
-  wave that is simply a wall without the one correct answer.
+- **8 armour classes**; we now have 6 (Divine added in v3), still no Unarmored —
+  though under a flattened matrix it would differ from Light by 0.05, below the
+  point where it changes a decision.
 
 ## Reproducing the extraction
 

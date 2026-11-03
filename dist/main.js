@@ -29,12 +29,27 @@ const THREAT = { warn: "#d98a33", crit: "#a13a2e" };                   // armore
 const CALLSIGNS = ["HOWL", "GOLD", "IRON", "DUST"];                    // corner houses / co-op zones
 
 // ----------------------------------------------------------------- data (ported)
+// Divine waves take a tenth from everything except chaos; chaos does almost
+// nothing to anything else. 0.10/0.35 rather than the original's 0.05/0.02:
+// in a 30-wave solo run a tower that renders zero damage for four waves reads
+// as broken, and these keep the 10x separation that carries the mechanic while
+// leaving a computable (losing) route for a player who skips the Void line.
+const DIVINE_FLOOR = 0.10, CHAOS_FLOOR = 0.35;
 const ARMOR_MATRIX = {
-  pierce: { light: 2.0, medium: 0.75, heavy: 1.0, fortified: 0.35, hero: 0.5 },
-  siege:  { light: 1.0, medium: 0.5,  heavy: 1.0, fortified: 1.5,  hero: 0.5 },
-  magic:  { light: 1.25,medium: 0.75, heavy: 2.0, fortified: 0.35, hero: 0.5 },
-  normal: { light: 1.0, medium: 1.5,  heavy: 1.0, fortified: 0.7,  hero: 1.0 },
-  chaos:  { light: 1.0, medium: 1.0, heavy: 1.0, fortified: 1.0, hero: 1.0 }, // WC3 Chaos — ignores all armor
+  // Flattened to the WC3 original's real spread (war3mapMisc.txt, verified
+  // byte-for-byte — see WC3-COMPARISON.md). Ordinary cells sit in 0.75-1.30, so
+  // picking the wrong tower costs ~25%, not the 65% our old 0.35-2.00 table did.
+  //
+  // The two extremes carry the design. `divine` takes DIVINE_FLOOR from
+  // everything, and `chaos` is the one key that opens it: full damage on divine,
+  // CHAOS_FLOOR on everything else. Void stops being a generically strong late
+  // tower and becomes a situational must-have on known waves.
+  //            light  medium  heavy  fortified  hero   divine
+  pierce: { light: 1.30, medium: 0.90, heavy: 1.00, fortified: 0.80, hero: 0.80, divine: DIVINE_FLOOR },
+  siege:  { light: 0.95, medium: 0.90, heavy: 1.00, fortified: 1.25, hero: 0.90, divine: DIVINE_FLOOR },
+  magic:  { light: 1.10, medium: 0.85, heavy: 1.30, fortified: 0.75, hero: 0.85, divine: DIVINE_FLOOR },
+  normal: { light: 1.00, medium: 1.15, heavy: 0.95, fortified: 0.85, hero: 1.00, divine: DIVINE_FLOOR },
+  chaos:  { light: CHAOS_FLOOR, medium: CHAOS_FLOOR, heavy: CHAOS_FLOOR, fortified: CHAOS_FLOOR, hero: CHAOS_FLOOR, divine: 1.00 },
 };
 
 // Enemy `color` = Color caste (render-only). Archetypes stay legible via shapes
@@ -64,7 +79,7 @@ const TOWERS = {
   damage_aura: T({ name: "Dmg Aura", key: "8", range: 0, damage: 0, cd: 0, cost: 220, color: "#c41e3a",   dtype: null, aura: { type: "dmg", radius: 160, value: 0.20 }, desc: "+20% dmg nearby" }),
   speed_aura:  T({ name: "Spd Aura", key: "9", range: 0, damage: 0, cd: 0, cost: 200, color: "#d4a84b",  dtype: null, aura: { type: "cd", radius: 150, value: 0.15 }, desc: "-15% cooldown nearby" }),
   mint:        T({ name: "Mint",    key: "0", range: 0, damage: 0, cd: 0, cost: 150, color: "#f0d060", dtype: null, income: 8, desc: "+8g per wave cleared" }),
-  void:        T({ name: "Void",    key: "v", range: 155, damage: 32, cd: 50, cost: 380, color: "#8b5cf6", dtype: "chaos", desc: "Chaos dmg · ignores armor" }),
+  void:        T({ name: "Void",    key: "v", range: 155, damage: 32, cd: 50, cost: 380, color: "#8b5cf6", dtype: "chaos", desc: "Chaos — the key to divine waves" }),
 };
 
 // ---- tower progression: linear Lv1→2→3, then a 3-way specialization
@@ -156,7 +171,7 @@ const WAVES = [
   { id: 2, name: "Patrol", hint: "Two corners. Spread your defenses.", reward: 60, spawns: [{ e: "Normal", n: 10, iv: 0.7, at: 0 }, { e: "Normal", n: 10, iv: 0.7, at: 2 }] },
   { id: 3, name: "Swift Strike", hint: "Fast enemies. Freeze or pierce them.", reward: 55, spawns: [{ e: "Swift", n: 12, iv: 0.5, at: 0 }] },
   { id: 4, name: "First Mass", hint: "Swarm of small enemies. AoE shines.", reward: 55, spawns: [{ e: "Swarm", n: 18, iv: 0.3, at: 0 }] },
-  { id: 5, name: "Iron Probe", hint: "Heavy armor — Pierce penalty. Try Siege/Magic.", reward: 70, spawns: [{ e: "Armored", n: 8, iv: 0.8, at: 0 }] },
+  { id: 5, name: "Iron Probe", hint: "DIVINE — only Chaos (Void) hurts them. Everything else does 10%.", armor: "divine", reward: 70, spawns: [{ e: "Armored", n: 8, iv: 0.8, at: 0 }] },
   { id: 6, name: "Choirs", hint: "Mixed speed. Balance your army.", reward: 65, spawns: [{ e: "Normal", n: 10, iv: 0.7, at: 0 }, { e: "Swift", n: 4, iv: 0.4, at: 3 }] },
   { id: 7, name: "The Steel Tide", hint: "Heavy mass. Pierce is weak here.", reward: 80, spawns: [{ e: "Armored", n: 14, iv: 0.8, at: 0 }, { e: "Armored", n: 3, iv: 1.6, at: 5 }] },
   { id: 8, name: "Ghost Patrol", hint: "Invisible enemies. Build a Detector.", reward: 65, spawns: [{ e: "Invisible", n: 6, iv: 0.9, at: 0 }, { e: "Normal", n: 4, iv: 0.7, at: 2 }] },
@@ -164,7 +179,7 @@ const WAVES = [
   { id: 10, name: "First Sentinel", hint: "BOSS — a single powerful foe with escorts.", boss: true, reward: 250, spawns: [{ e: "Boss", n: 1, iv: 0, at: 0 }, { e: "Normal", n: 6, iv: 0.7, at: 0.5 }] },
   { id: 11, name: "Frost Burn", hint: "Immune to slow. Frost loses its edge.", reward: 75, spawns: [{ e: "Immune", n: 12, iv: 0.7, at: 0 }] },
   { id: 12, name: "Razor Wing", hint: "Fast flyers. Sniper/Frost help.", reward: 80, spawns: [{ e: "Air", n: 14, iv: 0.4, at: 0 }] },
-  { id: 13, name: "Ghost Stampede", hint: "Invisible + fast. Detector + AoE.", reward: 85, spawns: [{ e: "Invisible", n: 12, iv: 0.4, at: 0 }, { e: "Swift", n: 8, iv: 0.3, at: 2 }] },
+  { id: 13, name: "Ghost Stampede", hint: "DIVINE — only Chaos (Void) hurts them. Everything else does 10%.", armor: "divine", reward: 85, spawns: [{ e: "Invisible", n: 12, iv: 0.4, at: 0 }, { e: "Swift", n: 8, iv: 0.3, at: 2 }] },
   { id: 14, name: "Dread Cavalry", hint: "Heavy + swift. Diversify.", reward: 80, spawns: [{ e: "Armored", n: 8, iv: 0.8, at: 0 }, { e: "Swift", n: 4, iv: 0.4, at: 4 }] },
   { id: 15, name: "Bound Watchers", hint: "Flyer pairs. Anti-air mandatory.", reward: 90, spawns: [{ e: "Air", n: 8, iv: 0.7, at: 0 }, { e: "Air", n: 4, iv: 0.7, at: 0 }] },
   { id: 16, name: "The Pulse", hint: "Immune + invisible. Detector + non-slow.", reward: 85, spawns: [{ e: "Immune", n: 5, iv: 0.9, at: 0 }, { e: "Invisible", n: 3, iv: 0.9, at: 0 }] },
@@ -172,22 +187,18 @@ const WAVES = [
   { id: 18, name: "Ash Swarm", hint: "Swarm of flyers. AoE + anti-air.", reward: 90, spawns: [{ e: "Air", n: 24, iv: 0.25, at: 0 }] },
   { id: 19, name: "Iron Ghosts", hint: "Invisible mass. Detector + Siege/Magic.", reward: 95, spawns: [{ e: "Invisible", n: 10, iv: 0.7, at: 0 }] },
   { id: 20, name: "The Verdant Maw", hint: "MEGA BOSS.", boss: true, reward: 500, spawns: [{ e: "Armored", n: 6, iv: 0.6, at: 0 }, { e: "Invisible", n: 4, iv: 0.6, at: 0 }, { e: "Boss", n: 1, iv: 0, at: 4 }] },
-  { id: 21, name: "Hollow March", hint: "Hero + swarm.", reward: 100, spawns: [{ e: "Hero", n: 1, iv: 0, at: 0 }, { e: "Swarm", n: 18, iv: 0.25, at: 1 }] },
+  { id: 21, name: "Hollow March", hint: "DIVINE — only Chaos (Void) hurts them. Everything else does 10%.", armor: "divine", reward: 100, spawns: [{ e: "Hero", n: 1, iv: 0, at: 0 }, { e: "Swarm", n: 18, iv: 0.25, at: 1 }] },
   { id: 22, name: "Spectral Wing", hint: "Flyers. Detector + Sniper.", reward: 95, spawns: [{ e: "Air", n: 12, iv: 0.5, at: 0 }] },
   { id: 23, name: "The Brand", hint: "Immune + heavy. Magic/Siege dominate.", reward: 100, spawns: [{ e: "Immune", n: 10, iv: 0.7, at: 0 }] },
   { id: 24, name: "Storm Tide", hint: "All four corners flooding. Defend everywhere.", reward: 120, spawns: [{ e: "Normal", n: 8, iv: 0.5, at: 0 }, { e: "Swift", n: 8, iv: 0.5, at: 0 }, { e: "Armored", n: 8, iv: 0.5, at: 0 }, { e: "Swarm", n: 8, iv: 0.5, at: 0 }] },
   { id: 25, name: "The Crucible", hint: "Mixed armor, all corners. Tower diversity mandatory.", reward: 130, spawns: [{ e: "Normal", n: 6, iv: 0.5, at: 0 }, { e: "Swift", n: 6, iv: 0.5, at: 0 }, { e: "Armored", n: 6, iv: 0.5, at: 0 }, { e: "Immune", n: 6, iv: 0.5, at: 0 }] },
   { id: 26, name: "Final Sentinels", hint: "Heroes + escorts.", reward: 150, spawns: [{ e: "Hero", n: 4, iv: 3.0, at: 0 }, { e: "Hero", n: 4, iv: 3.0, at: 0 }, { e: "Armored", n: 8, iv: 0.5, at: 2 }] },
-  { id: 27, name: "The Long Dark", hint: "Immune + invisible puzzle.", reward: 120, spawns: [{ e: "Immune", n: 8, iv: 0.5, at: 0 }, { e: "Invisible", n: 8, iv: 0.4, at: 0 }] },
+  { id: 27, name: "The Long Dark", hint: "DIVINE — only Chaos (Void) hurts them. Everything else does 10%.", armor: "divine", reward: 120, spawns: [{ e: "Immune", n: 8, iv: 0.5, at: 0 }, { e: "Invisible", n: 8, iv: 0.4, at: 0 }] },
   { id: 28, name: "Sky Plague", hint: "Flyers + fast.", reward: 110, spawns: [{ e: "Air", n: 10, iv: 0.4, at: 0 }, { e: "Swift", n: 4, iv: 0.3, at: 2 }] },
   { id: 29, name: "The Coronation", hint: "Heroes from every corner + swarm.", reward: 200, spawns: [{ e: "Hero", n: 5, iv: 3.0, at: 0 }, { e: "Hero", n: 5, iv: 3.0, at: 0 }, { e: "Swarm", n: 20, iv: 0.2, at: 1 }] },
   { id: 30, name: "The Pale Crown", hint: "FINAL BOSS.", boss: true, reward: 1000, spawns: [{ e: "Boss", n: 1, iv: 0, at: 0 }, { e: "Armored", n: 6, iv: 0.5, at: 3 }, { e: "Invisible", n: 4, iv: 0.5, at: 3 }, { e: "Hero", n: 2, iv: 2.0, at: 5 }] },
 ];
 
-function shuffleWaveOrder() {
-  const fisher = (arr) => { for (let i = arr.length - 1; i > 0; i--) { const j = 0 | (Math.random() * (i + 1)); [arr[i], arr[j]] = [arr[j], arr[i]]; } return arr; };
-  return [...fisher(WAVES.slice(0, 9)), WAVES[9], ...fisher(WAVES.slice(10, 19)), WAVES[19], ...fisher(WAVES.slice(20, 29)), WAVES[29]];
-}
 
 // ----------------------------------------------------------------- world geometry
 // TABLES: keep in sync with gctd-server/sim.js (path + economy + difficulty).
@@ -199,9 +210,32 @@ const TOWER_PAD = 36;          // drawn pad size (CELL is 40 — leaves a 2px gu
 const PATH_CLEAR = 28;         // min distance from any path to build
 const BASE_SPEED = 145;        // px/s before speed_mult (~70s track after P2 tune)
 
-const START_GOLD = 250, START_LIVES = 20;
+// Protocol rules version — must equal gctd-server's RULES_VERSION. net.js sends
+// it on create/join; a mismatch is refused with a "reload this page" message
+// rather than letting a stale tab play by the old rules.
+const RULES_VERSION = 3;
+const START_GOLD = 250;
 const SELL_RATE = 0.7;        // refund fraction of `invested` — keep in sync with gctd-server/sim.js
-const PB_KEY = "speedrungames:green-circle-td:pb";
+
+// ---- Overrun (replaces the old one-way lives counter) -----------------------
+// Ported from the WC3 original, which has no lives at all: a creep that gets
+// past you joins a shared pool and keeps circling, and KILLING it takes its
+// weight back off the meter. A leak is a debt you can pay, not permanent damage.
+// See WC3-COMPARISON.md. Keep every constant here in sync with gctd-server/sim.js.
+const OVERRUN_MAX = 60;       // weights are the old leak costs, so this is ~4 waves of standing leaks
+const LEAK_WEIGHT = { boss: 10, hero: 4, other: 1 };
+const LAP_RAMP = 1.6;         // a creep you never kill gets heavier each lap...
+const LAP_RAMP_CAP = OVERRUN_MAX; // ...uncapped in effect: ONE un-killable creep must be
+                                  // able to end the run on its own, or a lone air leaker
+                                  // with no AA hangs the game (never lost, never won).
+                                  // Normal creep tops out on lap 10, boss on lap 5.
+const LAP_DESPAWN = 12;       // pure array bound — the ramp ends the run before this
+const leakWeight = (en) =>
+  (en.flags.includes("boss") ? LEAK_WEIGHT.boss : en.flags.includes("hero") ? LEAK_WEIGHT.hero : LEAK_WEIGHT.other)
+  // `laps` counts completed laps, so the FIRST leak is base weight and the
+  // ramp only starts biting on the second time round.
+  * Math.min(LAP_RAMP_CAP, Math.pow(LAP_RAMP, Math.max(0, (en.laps || 0) - 1)));
+const PB_KEY = "speedrungames:green-circle-td:pb:v3";  // v3 rules — not comparable to v2 times
 const MIN_ZOOM = 0.35, MAX_ZOOM = 2.2;
 
 const DIFFICULTY = {
@@ -219,14 +253,15 @@ const ARMOR_INFO = {
   heavy:     { color: "#c9a35c", counter: "Siege / Magic" },
   fortified: { color: "#9aa8c4", counter: "Siege best" },
   hero:      { color: "#e8c468", counter: "Normal best" },
+  divine:    { color: "#e0a8d8", counter: "CHAOS ONLY" },
 };
 // Flag badges used wherever an enemy's special rules need to be glanceable.
 const FLAG_BADGE = {
   air:       { icon: "✈", label: "Air — only Sniper / Rapid / Frost reach it" },
   invisible: { icon: "◌", label: "Invisible — needs a Detector in range" },
   immune:    { icon: "⊘", label: "Immune — ignores slow and poison" },
-  hero:      { icon: "★", label: "Hero — 4 lives if it leaks" },
-  boss:      { icon: "☠", label: "Boss — 10 lives if it leaks" },
+  hero:      { icon: "★", label: "Hero — adds 4 overrun if it gets past you" },
+  boss:      { icon: "☠", label: "Boss — adds 10 overrun if it gets past you" },
 };
 function mulberry32(a) {
   return function () {
@@ -281,6 +316,9 @@ function loopPath(k, fork = 0) {
   return pts;
 }
 const PATH_VARIANTS = [0, 1, 2, 3].map((k) => [loopPath(k, 0), loopPath(k, 1)]);
+// A full run's worth of the server's raw `prog` units (it sends
+// `wp * 10000 - distToNext`), used to turn netProg back into a 0..1 fraction.
+const NET_PROG_FULL = Math.max(...PATH_VARIANTS.flat().map((p) => (p.length - 1) * 10000));
 const PATHS = PATH_VARIANTS.map((v) => v[0]);
 const ENTRIES = cornersAt(MAZE_IN);
 
@@ -459,7 +497,7 @@ class Game {
     const gold0 = Math.round(START_GOLD * diff.gold);
     this.players = Array.from({ length: n }, (_, i) => ({ gold: gold0, color: PLAYER_COLORS[i], name: `P${i + 1}` }));
     this.activePlayer = 0;
-    this.lives = START_LIVES;
+    this.overrun = 0;
     this.towers = [];
     this.selectedTower = null;
     this.occupied = new Set();
@@ -472,7 +510,7 @@ class Game {
     this.waveIndex = 0;
     this.seed = (Date.now() >>> 0) ^ (n * 0x9E3779B9);
     this.rng = mulberry32(this.seed);
-    this.waves = shuffleWaveOrder();
+    this.waves = WAVES.slice();   // fixed, published order — see renderSchedule()
     this.spawnQueue = [];
     this.activeWaves = [];
     this.autoWaveAt = null; // gameTime when auto-start fires (null = none pending)
@@ -597,8 +635,45 @@ class Game {
         helpToggle.setAttribute("aria-expanded", open ? "true" : "false");
       };
     }
+    const schedToggle = document.getElementById("schedToggle");
+    if (schedToggle) {
+      schedToggle.onclick = () => {
+        const p = document.getElementById("schedulePanel");
+        if (!p) return;
+        const open = p.classList.toggle("collapsed") === false;
+        schedToggle.setAttribute("aria-expanded", open ? "true" : "false");
+        if (open) this.renderSchedule();
+      };
+    }
     this.refreshButtons();
   }
+
+  /**
+   * The whole 30-wave armour schedule, up front. The surviving WC3 forks print
+   * exactly this on request (`-air`, `-divine`, `-heavy`…), and planning a
+   * build against it is the original's actual skill expression — which is why
+   * v3 drops the randomised wave order rather than keeping both.
+   * Built once; the order no longer changes between runs.
+   */
+  renderSchedule() {
+    const body = document.getElementById("schedBody");
+    if (!body || body.dataset.built === "1") return;
+    body.dataset.built = "1";
+    body.innerHTML = WAVES.map((w) => {
+      const classes = [...new Set(w.spawns.map((sp) => w.armor || ENEMIES[sp.e].armor))];
+      const flags = [...new Set(w.spawns.flatMap((sp) => ENEMIES[sp.e].flags))]
+        .filter((f) => FLAG_BADGE[f])
+        .map((f) => `<span class="nwflag" title="${FLAG_BADGE[f].label}">${FLAG_BADGE[f].icon}</span>`).join("");
+      const pills = classes.map((a) => {
+        const info = ARMOR_INFO[a] || { color: "#e8f3ea" };
+        return `<span class="schedarm" style="color:${info.color}">${a}</span>`;
+      }).join(" ");
+      return `<div class="schedrow${w.armor === "divine" ? " divine" : ""}${w.boss ? " boss" : ""}">
+        <span class="schedn">${w.id}</span><span class="schedname">${w.name}</span>${flags}${pills}
+      </div>`;
+    }).join("");
+  }
+
   syncSpeedSeg() {
     document.querySelectorAll("#speedSeg .seg-btn").forEach((b) => {
       const on = +b.dataset.speed === this.speed;
@@ -622,13 +697,35 @@ class Game {
     document.getElementById("gold").textContent = this.players.length > 1
       ? `${this.players[this.activePlayer].name} ${Math.floor(this.gold)}g`
       : `${Math.floor(this.gold)}g`;
-    const livesEl = document.getElementById("lives");
-    livesEl.textContent = `Lives ${Math.max(0, this.lives)}`;
-    livesEl.classList.toggle("low", this.lives <= 5 && this.state !== "won");
+    this.renderOverrun();
     if (this.selectedTower) this.renderInspector();
     if (this.renderPlayerPanel) this.renderPlayerPanel();
     this.renderNextWave();
   }
+  /** True once the overrun pool is close enough to kill you. One definition,
+   *  used by both the HUD tint and the centre beacon (they used to drift). */
+  inDanger() { return this.overrun >= OVERRUN_MAX * 0.7 && this.state !== "won"; }
+
+  /** The overrun meter. Unlike the lives counter it replaced, this moves in
+   *  both directions, so it is a bar rather than a number — and it is the
+   *  first HUD element with a real accessible description. */
+  renderOverrun() {
+    const el = document.getElementById("overrun");
+    if (!el) return;
+    const frac = clamp(this.overrun / OVERRUN_MAX, 0, 1);
+    const pct = Math.round(frac * 100);
+    const loose = this.enemies.reduce((s, e) => s + (e.lapped && e.hp > 0 ? 1 : 0), 0);
+    el.style.setProperty("--fill", `${pct}%`);
+    el.classList.toggle("warn", frac >= 0.4 && frac < 0.7);
+    el.classList.toggle("crit", this.inDanger());
+    el.setAttribute("aria-valuenow", String(pct));
+    el.setAttribute("aria-valuetext", loose
+      ? `Overrun ${pct} percent, ${loose} creep${loose === 1 ? "" : "s"} loose`
+      : `Overrun ${pct} percent`);
+    const label = el.querySelector(".meter-label");
+    if (label) label.textContent = loose ? `${pct}% · ${loose} loose` : `${pct}%`;
+  }
+
   renderPB() { document.getElementById("pb").textContent = this.pb == null ? "PB —" : "PB " + fmt(this.pb); }
   setWaveText(name, hint) {
     document.getElementById("waveName").textContent = name;
@@ -690,7 +787,7 @@ class Game {
       </div>`;
     }).join("");
 
-    const armors = [...new Set(w.spawns.map((sp) => ENEMIES[sp.e].armor))];
+    const armors = [...new Set(w.spawns.map((sp) => w.armor || ENEMIES[sp.e].armor))];
     const counters = [...new Set(armors.map((a) => (ARMOR_INFO[a] || {}).counter).filter(Boolean))];
     document.getElementById("nextBody").innerHTML =
       rows + `<div class="nwfoot">${counters.join(" · ")} · bounty pool ${w.reward}g</div>`;
@@ -1047,6 +1144,27 @@ class Game {
     this.refreshButtons();
     this.renderInspector();
   }
+  /** Step a tower back one rung (spec first, then a level), refunding at
+   *  SELL_RATE — the same rate as selling, so downgrade-then-sell can never
+   *  beat selling outright. Mirrors gctd-server/sim.js downgrade(). */
+  downgradeTower(tw) {
+    if (!tw || this.state !== "running" || !this.towers.includes(tw)) return;
+    if (this.net) { this.net.send({ t: "downgrade", c: tw.c, r: tw.r }); return; }
+    if (this.players.length > 1 && tw.player !== this.activePlayer) return;
+    let cost;
+    if (tw.spec) { cost = specCost(tw.type); tw.spec = null; }
+    else if (tw.level > 1) { cost = upgradeCost(tw.type, tw.level - 1); tw.level--; }
+    else return;
+    tw.invested = Math.max(0, tw.invested - cost);
+    const refund = Math.floor(cost * SELL_RATE);
+    this.players[tw.player ?? 0].gold += refund;
+    tw.s = statsFor(tw.type, tw.level, tw.spec);
+    this.spawnFx(tw.x, tw.y - 18, BRASS, "text", 0, { txt: `+${refund}g` });
+    SFX.deny();
+    this.recomputeAuras();
+    this.refreshButtons();
+    this.renderInspector();
+  }
   sellAt(c, r) {
     const idx = this.towers.findIndex((t) => t.c === c && t.r === r);
     if (idx < 0) return;
@@ -1163,6 +1281,20 @@ class Game {
       }
       actions.appendChild(row);
     }
+    // Downgrade sits OUTSIDE the upgrade/specialise/max branch above — those
+    // three are mutually exclusive, and a tower can be rolled back from any of
+    // them. Built from the Sell template rather than mkBtn, which hard-wires
+    // `disabled = gold < cost` and cannot express a refund.
+    if (tw.level > 1 || tw.spec) {
+      const back = tw.spec ? specCost(tw.type) : upgradeCost(tw.type, tw.level - 1);
+      const dn = document.createElement("button");
+      dn.className = "ibtn sell";
+      dn.innerHTML = `<span>Downgrade<span class="isub">${tw.spec ? "drop spec" : `to Lv ${tw.level - 1}`}</span></span>` +
+                     `<span class="icost">+${Math.floor(back * SELL_RATE)}g</span>`;
+      dn.disabled = this.state !== "running";
+      dn.onclick = () => this.downgradeTower(tw);
+      actions.appendChild(dn);
+    }
     const sell = document.createElement("button");
     sell.className = "ibtn sell";
     sell.innerHTML = `<span>Sell</span><span class="icost">+${Math.floor(tw.invested * SELL_RATE)}g</span>`;
@@ -1230,7 +1362,7 @@ class Game {
       for (let i = 0; i < count; i++) {
         this.spawnQueue.push({
           time: this.gameTime + sp.at + i * sp.iv,
-          enemy: sp.e, def: e, corner,
+          enemy: sp.e, def: e, corner, armor: w.armor || e.armor,
           hp: hpBase * e.health_mult,
           speed: BASE_SPEED * e.speed_mult,
           bounty: Math.max(1, Math.round((3 + Math.floor(this.waveIndex / 3) + e.bounty_bonus) * diff.bounty)),
@@ -1243,7 +1375,7 @@ class Game {
     this.spawnQueue.sort((a, b) => a.time - b.time);
     const waveTitle = stackBonus ? `Wave ${w.id}: ${w.name}  +${stackBonus}g` : `Wave ${w.id}: ${w.name}`;
     this.setWaveText(waveTitle, w.hint);
-    const armorTypes = [...new Set(w.spawns.map((sp) => ENEMIES[sp.e].armor))];
+    const armorTypes = [...new Set(w.spawns.map((sp) => w.armor || ENEMIES[sp.e].armor))];
     const hasAir = w.spawns.some(sp => ENEMIES[sp.e].flags?.includes("air"));
     this.setArmorPill(armorTypes, hasAir);
     const wavePanel = document.getElementById("wavePanel");
@@ -1261,8 +1393,9 @@ class Game {
       x: path[0][0], y: path[0][1], wp: 0, path, fork, corner: s.corner,
       hp: s.hp, maxHp: s.hp, speed: s.speed, baseSpeed: s.speed,
       def: s.def, enemy: s.enemy, bounty: s.bounty, rec: s.rec,
-      flags: s.def.flags, armor: s.def.armor, color: s.def.color,
+      flags: s.def.flags, armor: s.armor || s.def.armor, color: s.def.color,
       slowUntil: 0, slowFactor: 0, poison: 0, poisonUntil: 0, revealed: false,
+      laps: 0, lapped: false, weight: 0,
       phase: s.def.flags.includes("boss") ? 1 : 0,
       revealFlash: 0,
     };
@@ -1319,7 +1452,7 @@ class Game {
       if (en.hp <= 0) this.onKill(en);
     }
     this.enemies = this.enemies.filter((e) => {
-      const keep = e.hp > 0 && !e.leaked;
+      const keep = e.hp > 0 && !e.leaked;   // `leaked` is now set only at LAP_DESPAWN
       if (!keep && e.rec) e.rec.alive--;   // released from its wave's live count
       return keep;
     });
@@ -1359,7 +1492,7 @@ class Game {
 
       const wavePanel = document.getElementById("wavePanel");
       if (wavePanel) wavePanel.classList.remove("boss-wave");
-      if (this.waveIndex >= WAVES.length && this.activeWaves.length === 0 && this.lives > 0) { this.autoWaveAt = null; this.setWaveText("All clear", "Final wave done!"); this.setArmorPill([]); this.end(true); return; }
+      if (this.waveIndex >= WAVES.length && this.activeWaves.length === 0 && this.enemies.length === 0 && this.overrun < OVERRUN_MAX) { this.autoWaveAt = null; this.setWaveText("All clear", "Final wave done!"); this.setArmorPill([]); this.end(true); return; }
       const nextName = this.waves[this.waveIndex]?.name ?? "";
       // Auto-advance only when the battlefield has no remaining live waves (stacking still works via Space)
       const willAuto = this.activeWaves.length === 0 && this.waveIndex < WAVES.length;
@@ -1380,7 +1513,7 @@ class Game {
       if (this.state === "running" && this.activeWaves.length === 0 && this.waveIndex < WAVES.length)
         this.startNextWave();
     }
-    if (this.lives <= 0) this.end(false);
+    if (this.overrun >= OVERRUN_MAX) this.end(false);
     if (this._shake && this._shake.t > 0) { this._shake.t -= dt; if (this._shake.t <= 0) this._shake = null; }
   }
 
@@ -1396,7 +1529,7 @@ class Game {
         if (d <= remaining) { en.x = tx; en.y = ty; en.wp++; remaining -= d; }
         else { en.x += (dx / d) * remaining; en.y += (dy / d) * remaining; remaining = 0; }
       }
-      if (en.wp >= last) { en.leaked = true; this.onLeak(en); }
+      if (en.wp >= last) this.onLeak(en);   // re-paths onto a fresh lap rather than dying
     }
   }
 
@@ -1488,7 +1621,7 @@ class Game {
           x: path[0][0], y: path[0][1], wp: 0, path, fork: en.fork || 0, corner: en.corner || 0,
           hp, maxHp: hp, speed: BASE_SPEED * e.speed_mult, baseSpeed: BASE_SPEED * e.speed_mult,
           def: e, enemy: "Armored", bounty: Math.round((3 + Math.floor(this.waveIndex / 3) + e.bounty_bonus) * diff.bounty),
-          rec: en.rec, flags: e.flags, armor: e.armor, color: e.color,
+          rec: en.rec, flags: e.flags, armor: en.armor, color: e.color,
           slowUntil: 0, slowFactor: 0, poison: 0, poisonUntil: 0, revealed: true, phase: 0, revealFlash: 0,
         });
         if (en.rec) en.rec.alive++;
@@ -1526,6 +1659,11 @@ class Game {
   }
   onKill(en) {
     if (en._dead) return; en._dead = true;
+    // Clearing the backlog pays twice: the bounty, and the weight comes off.
+    if (en.lapped && en.weight) {
+      this.overrun = Math.max(0, this.overrun - en.weight);
+      this.spawnFx(en.x, en.y - 18, "#a8d98f", "text", 0, { txt: `-${Math.round(en.weight)} overrun` });
+    }
     this.players[en.lastHitPlayer ?? 0].gold += en.bounty;
     if (en.flags.includes("boss")) { this.spawnFx(en.x, en.y, en.color, "bossburst"); this.shakeCamera(0.38, 7); SFX.boss(); }
     else {
@@ -1541,12 +1679,26 @@ class Game {
     if (this._shake && this._shake.t > 0 && intensity < this._shake.intensity) return;
     this._shake = { t: duration, dur: duration, intensity };
   }
+  /**
+   * A creep reached the green circle. It does not die and you do not lose a
+   * life: it joins the overrun pool and starts another lap, carrying a weight
+   * you can take back off the meter by killing it. Each lap it survives makes
+   * it heavier, so a leaker nobody can reach still ends the game eventually
+   * rather than parking there forever.
+   */
   onLeak(en) {
-    const cost = en.flags.includes("boss") ? 10 : en.flags.includes("hero") ? 4 : 1;
-    this.lives -= cost;
+    if (en.rec) { en.rec.alive--; en.rec = null; }  // release it: its wave can still clear
+    en.laps = (en.laps || 0) + 1;
+    en.lapped = true;
+    if (en.laps > LAP_DESPAWN) { en.leaked = true; return; }  // culled below; weight stays
+    const prev = en.weight || 0;
+    en.weight = leakWeight(en);
+    this.overrun = Math.min(OVERRUN_MAX, this.overrun + (en.weight - prev));
+    en.wp = 0; en.x = en.path[0][0]; en.y = en.path[0][1];
     this.shellEvent("leak");
     this.spawnFx(CENTER.x, CENTER.y, THREAT.crit, "ring", 0, { r: 60 });
-    this.spawnFx(CENTER.x, CENTER.y - 28, THREAT.crit, "text", 0, { txt: cost === 1 ? "-1 life" : `-${cost} lives` });
+    this.spawnFx(CENTER.x, CENTER.y - 28, THREAT.crit, "text", 0,
+      { txt: en.laps === 1 ? `+${Math.round(en.weight)} overrun` : `lap ${en.laps} · +${Math.round(en.weight - prev)}` });
     SFX.leak();
     this.refreshButtons();
   }
@@ -1564,12 +1716,18 @@ class Game {
     let threat = 0;
     for (const en of this.enemies) {
       if (en.hp <= 0) continue;
-      const prog = en.path ? en.wp / Math.max(1, en.path.length - 1) : (en.netProg || 0);
-      threat = Math.max(threat, prog);
+      // netProg is the server's RAW progress (`wp * 10000 - distToNext`), not a
+      // fraction — feeding it in directly made `threat` tens of thousands, which
+      // blew the centre beacon's radius up past the viewport and flooded the
+      // whole field with THREAT.crit. Online-only, and broken since v2.0.0.
+      const prog = en.path
+        ? en.wp / Math.max(1, en.path.length - 1)
+        : (en.netProg || 0) / (NET_PROG_FULL || 1);
+      threat = Math.max(threat, clamp(prog, 0, 1));
       if (en.flags.includes("boss")) threat = Math.max(threat, 0.55 + (en.phase || 1) * 0.12);
     }
-    this._centerThreat = threat;
-    if (this.lives <= 5) this._centerThreat = Math.max(this._centerThreat, 0.7);
+    this._centerThreat = clamp(threat, 0, 1);
+    if (this.inDanger()) this._centerThreat = Math.max(this._centerThreat, 0.7);
     // 2×/3× = run the fixed-step sim multiple times per frame (keeps physics stable)
     const steps = this.net ? 1 : this.state === "running" ? this.speed : 1;
     for (let i = 0; i < steps; i++) this.update(dt);
@@ -1856,7 +2014,7 @@ class Game {
     this.drawLaneFlow(ctx);
     this.drawSpawnGates(ctx);
 
-    // Gold Society pit beacon — intensity tracks leak threat / boss / low lives
+    // Gold Society pit beacon — intensity tracks leak threat / boss / overrun
     const threat = this._centerThreat || 0;
     const cpulse = this.reducedMotion ? 0.5 : (0.5 + 0.5 * Math.sin(this.gameTime * (2.4 + threat * 2)));
     const cr = 8 + cpulse * 3 + threat * 6;

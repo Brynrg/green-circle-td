@@ -27,9 +27,23 @@ you can (speedrun).
   square rings inward to the center (CW or seeded CCW fork). A leak = a creep
   reaching the center (boss −10 lives, hero −4, others −1). Fixed Path mode
   disables fork variance for speedruns.
-- **Armor-vs-damage matrix** — `pierce / siege / magic / normal / chaos` vs
-  `light / medium / heavy / fortified / hero`. Chaos (WC3-style) ignores armor
-  entirely — the late-game answer to immune+fortified stacks.
+- **Armor-vs-damage matrix, ported from the real map** — `pierce / siege /
+  magic / normal / chaos` vs `light / medium / heavy / fortified / hero /
+  divine`. Ordinary matchups sit in a gentle 0.75–1.30 band, exactly as the WC3
+  original's own damage table does. The two extremes carry the game: **divine**
+  takes 0.10 from everything, and **chaos** is the one key that opens it — 1.00
+  vs divine, 0.35 vs everything else.
+- **Divine walls on waves 5, 13, 21 and 27** — unclearable without a Void line,
+  and deliberately *not* on the boss waves, so a boss is never a wall with a
+  single answer.
+- **Leaks are recoverable** — there is no lives counter. A creep that reaches
+  the centre doesn't die: it starts another lap and adds its weight to a shared
+  **overrun meter**, and killing it later takes that weight back off. Each lap
+  it survives makes it heavier, so a backlog you ignore still ends the run. This
+  is the WC3 original's actual loss model, which uses a weighted census rather
+  than lives.
+- **Tower downgrade** — roll a tower back one tier (spec first, then a level)
+  and recover gold at the sell rate, so an over-committed line isn't dead money.
 - **11 towers** — Basic, Sniper, Rapid, Splash (AoE), Frost (slow), Poison
   (DoT), Detector (reveals invisibles), Damage Aura (+20% nearby), Speed Aura
   (−15% cooldown nearby), Mint (+gold per wave cleared), Void (chaos damage).
@@ -40,8 +54,10 @@ you can (speedrun).
 - **9 enemy types** with flags — air, immune (to slow/poison), invisible (needs
   a Detector in range to be targeted), hero, boss — each with a distinct
   procedural silhouette for at-a-glance reads.
-- **30 waves with randomized order** — non-boss waves shuffle within difficulty
-  bands each run (1–9, 11–19, 21–29); bosses fixed at 10 / 20 / 30.
+- **30 waves in a fixed, published order** — the sidebar lists every wave's
+  armour class and flags up front, the way the surviving WC3 forks print theirs
+  with `-air` / `-divine`. Planning the build against the schedule is the
+  original's real skill expression.
 - **Economy** — kill bounties (to the killing tower's owner), wave-clear
   rewards (split in co-op), Mint income, 2% interest (capped), +15g
   stack-a-wave-early bonus.

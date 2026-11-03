@@ -9,7 +9,7 @@
  * renderer draws it, and converts player actions into protocol messages.
  *
  * Lobby model (WC3-style): create a room → share the 4-letter code → host
- * starts. Up to 4 players, each owns a build zone, lives are shared.
+ * starts. Up to 4 players, each owns a build zone, the overrun meter is shared.
  */
 
 (() => {
@@ -107,7 +107,7 @@
       g.hideOverlay();
       const pauseBtn = document.getElementById("pauseBtn");
       if (pauseBtn) pauseBtn.style.display = "none"; // no pausing an online game
-      g.setWaveText(`Online co-op · room ${this.code}`, "Build towers, then send the first wave. Lives are shared!");
+      g.setWaveText(`Online co-op · room ${this.code}`, "Build towers, then send the first wave. The overrun meter is shared!");
       g.renderPlayerPanel();
       g.refreshButtons();
     }
@@ -144,10 +144,10 @@
       g.refreshButtons();
     }
 
-    // ---- 15Hz snapshot: enemies, golds, lives, fx events
+    // ---- 15Hz snapshot: enemies, golds, overrun, fx events
     onSnap(m) {
       const g = this.game;
-      g.lives = m.lv;
+      g.overrun = m.ov ?? 0;
       g.runMs = m.ms;
       g.waveIndex = m.wi;
       g.activeWaves.length = m.aw; // only .length is read in online mode
@@ -256,7 +256,7 @@
     const menu = () => {
       const o = game.overlay(
         `<h2>Online Multiplayer</h2>` +
-        `<p>Co-op for 2–4 players. Each player builds in their own zone, gold is per player, lives are shared — just like the WC3 original.</p>` +
+        `<p>Co-op for 2–4 players. Each player builds in their own zone, gold is per player, the overrun meter is shared — just like the WC3 original.</p>` +
         `<input id="nName" class="ninput" placeholder="Your name" maxlength="12" value="${esc(loadName())}">` +
         `<div class="prow"><span class="phint">Difficulty:</span><div class="pbtns">` +
         `<button class="psb psel" data-diff="normal">Normal</button>` +
@@ -285,6 +285,9 @@
         return v;
       };
       const opts = () => ({
+        // Must match gctd-server's RULES_VERSION or the server refuses the room
+        // and tells the player to reload — see the rules gate in server.js.
+        rules: RULES_VERSION,
         difficulty,
         fixedPath: !!o.querySelector("#nFixedPath")?.checked,
       });
