@@ -47,8 +47,8 @@ pipeline, and the traps that have already bitten previous sessions.
 - Network enemies are mirror objects with **no `path`**; they carry `netAng`
   (heading) and `netProg` (path progress) instead. `drawCreep` and
   `pickTargets` have guards for this — keep them if you refactor.
-- Per-player build zones (`cellOwner`), per-player gold, **shared lives** —
-  faithful to the WC3 original. Zone/gold/upgrade rules are validated
+- Per-player build zones (`cellOwner`), per-player gold, **a shared overrun
+  meter** — faithful to the WC3 original. Zone/gold/upgrade rules are validated
   server-side; the client checks are UX only.
 
 ### Protocol cheat-sheet (client ⇄ server, JSON over WebSocket)
@@ -68,13 +68,13 @@ The authoritative protocol definition lives in `gctd-server/server.js` + `sim.js
 # 1. edit source, then ALWAYS:
 node build.mjs
 # 2. bump "version" in game.manifest.json
-# 3. commit + push this repo
-# 4. in the hub repo (Brynrg/speedrungames, working copy often /tmp/srg-hub):
-git checkout main && git fetch && git reset --hard origin/main
-node scripts/ingest-game-build.mjs --game-dir <this repo> --status live
-git checkout -b deploy-gctd-vXYZ && git add -A && git commit && git push origin deploy-gctd-vXYZ
-gh pr create ... && gh pr merge --squash --admin
+# 3. commit + push to main. That IS the client deploy: .github/workflows/deploy.yml
+#    runs the hub's ingest and auto-merges a hub PR. Do not also open one by hand.
 ```
+
+Only if that workflow is unavailable, ingest by hand from a THROWAWAY clone of the
+hub (`scripts/ingest-game-build.mjs --game-dir <this repo> --status live`). Never
+run `reset --hard` in a shared hub checkout: other sessions work there.
 
 Netlify auto-deploys the hub's `main`. Server-side changes deploy separately:
 `fly deploy` inside the gctd-server repo.
@@ -97,7 +97,7 @@ Netlify auto-deploys the hub's `main`. Server-side changes deploy separately:
 - Snipers/Rapid/Frost are the only anti-air towers (`canAir`). Chaos (`void`) is
   NOT a generically strong damage type any more: it does CHAOS_FLOOR (0.35) to
   everything except `divine`, where it does 1.00 and nothing else does more than
-  DIVINE_FLOOR (0.10). It is the key to waves 5/13/21/27 and weak elsewhere.
+  DIVINE_FLOOR (0.05). It is the key to waves 5/13/21/27 and weak elsewhere.
 - Leaks are recoverable. A creep that reaches the centre does not die and costs
   no "life": it re-paths onto a fresh lap and adds `leakWeight()` to
   `this.overrun`; killing it later subtracts that weight again. It gets heavier

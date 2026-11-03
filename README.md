@@ -18,24 +18,25 @@ you can (speedrun).
 
 - **🌐 Online multiplayer (2–4 players)** — WC3-style lobby: create a room,
   share the 4-letter code, host starts. Each player builds in their own zone
-  with their own gold; **lives are shared**. Authoritative server
+  with their own gold; **the overrun meter is shared**. Authoritative server
   ([Brynrg/gctd-server](https://github.com/Brynrg/gctd-server) on Fly.io at
   `wss://gctd-server.fly.dev`) runs the one true sim; clients send inputs and
   render 15Hz snapshots. Local 1–4 player hot-seat co-op also available (Tab
   switches the active builder).
 - **Four-corner concentric rings** — creeps spawn from each corner and follow
   square rings inward to the center (CW or seeded CCW fork). A leak = a creep
-  reaching the center (boss −10 lives, hero −4, others −1). Fixed Path mode
+  reaching the center, which adds overrun (boss 10, hero 4, others 1) and starts
+  another lap. Fixed Path mode
   disables fork variance for speedruns.
 - **Armor-vs-damage matrix, ported from the real map** — `pierce / siege /
   magic / normal / chaos` vs `light / medium / heavy / fortified / hero /
   divine`. Ordinary matchups sit in a gentle 0.75–1.30 band, exactly as the WC3
   original's own damage table does. The two extremes carry the game: **divine**
-  takes 0.10 from everything, and **chaos** is the one key that opens it — 1.00
+  takes 0.05 from everything, and **chaos** is the one key that opens it — 1.00
   vs divine, 0.35 vs everything else.
-- **Divine walls on waves 5, 13, 21 and 27** — unclearable without a Void line,
-  and deliberately *not* on the boss waves, so a boss is never a wall with a
-  single answer.
+- **Divine walls on waves 5, 13, 21 and 27** — not on the boss waves. Skipping Void
+  is possible but rarely works: over 10 randomised tower placements a scripted
+  no-upgrade bot won 9/8/6 of 10 on Normal/Hard/Intense with Void and 3/1/0 without.
 - **Leaks are recoverable** — there is no lives counter. A creep that reaches
   the centre doesn't die: it starts another lap and adds its weight to a shared
   **overrun meter**, and killing it later takes that weight back off. Each lap

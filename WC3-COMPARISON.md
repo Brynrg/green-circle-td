@@ -150,7 +150,6 @@ tower; ours rewards spreading it.**
 - Speedrun framing: millisecond timer, PB, fixed-path mode, 1×/2×/3×, send-early
   with a gold bonus.
 - Three-way specialisations and multi-phase bosses.
-- Randomised wave order — though see the trade below.
 - Authoritative server; no Warcraft III install required; runs on a phone.
 - Our win condition actually ends the game.
 
@@ -158,8 +157,8 @@ tower; ours rewards spreading it.**
 
 Four of the gaps below were closed by porting the mechanics this document
 describes: the recoverable overrun meter replaces lives, the armour matrix is
-flattened to the original's real 0.75–1.30 band with Divine walls that only
-Chaos opens, tower downgrade is in, and the wave schedule is fixed and
+flattened to the original's real 0.75–1.30 band with Divine walls where Chaos
+is by far the efficient answer (skipping it is costly, not impossible), tower downgrade is in, and the wave schedule is fixed and
 published. What remains is listed next.
 
 ## Where the original still leads
