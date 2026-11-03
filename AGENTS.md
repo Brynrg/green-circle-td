@@ -5,7 +5,10 @@ pipeline, and the traps that have already bitten previous sessions.
 
 ## ⚠ The three rules that matter most
 
-1. **The simulation is DUPLICATED in two repos.** `main.js` here runs the solo /
+1. **The simulation is DUPLICATED in two repos.** `gctd-server/test/parity.test.js`
+   now enforces this — it diffs every shared table and asserts the slow/poison
+   behaviour. Run `npm test` in gctd-server after ANY balance edit.
+   (original note follows) `main.js` here runs the solo /
    local hot-seat game. `Brynrg/gctd-server` (`sim.js`) is a headless 1:1 port of
    the same mechanics for online multiplayer. **Any balance change — tower stats,
    enemy stats, armor matrix, waves, economy, upgrade costs — must be applied in
@@ -88,11 +91,18 @@ Netlify auto-deploys the hub's `main`. Server-side changes deploy separately:
 
 ## Known gotchas
 
-- Wave order is shuffled per run (`shuffleWaveOrder`) within difficulty bands;
-  bosses fixed at 10/20/30. Don't assert "wave 1 is First Light" in tests.
+- Wave order is FIXED and published (v3). `shuffleWaveOrder` is gone — planning
+  against the schedule is the point, and a random order made a speedrun PB luck.
 - Enemy `count_bonus` modifies spawn counts (e.g. "Iron Probe" 8 → 7 Armored).
-- Snipers/Rapid/Frost are the only anti-air towers (`canAir`); chaos (`void`)
-  ignores the armor matrix by having all-1.0 multipliers.
+- Snipers/Rapid/Frost are the only anti-air towers (`canAir`). Chaos (`void`) is
+  NOT a generically strong damage type any more: it does CHAOS_FLOOR (0.35) to
+  everything except `divine`, where it does 1.00 and nothing else does more than
+  DIVINE_FLOOR (0.10). It is the key to waves 5/13/21/27 and weak elsewhere.
+- Leaks are recoverable. A creep that reaches the centre does not die and costs
+  no "life": it re-paths onto a fresh lap and adds `leakWeight()` to
+  `this.overrun`; killing it later subtracts that weight again. It gets heavier
+  each lap (LAP_RAMP) so an un-killable leaker still ends the run. `onLeak` MUST
+  detach `en.rec` or the wave never clears and the game stalls.
 - `requestAnimationFrame` pauses in hidden tabs: in online mode, mirrored enemy
   positions freeze visually while snapshots keep arriving (tx/ty advance). Not
   a bug.
